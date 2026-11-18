@@ -1,10 +1,10 @@
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { convert } from "html-to-text";
-import { Resend, type ErrorResponse, type ListReceivingEmail, type ListReceivingEmailsResponseSuccess } from "resend";
+import { Resend, type ErrorResponse, type GetReceivingEmailResponseSuccess, type ListReceivingEmail, type ListReceivingEmailsResponseSuccess } from "resend";
 
 export type ReplySummary = { id: string; from: string; subject: string; date: string };
 export type ReplyPage = { mailbox: string; messages: ReplySummary[]; next: string | null };
-export type ReplyBody = { text: string; attachments: string[] };
+export type ReplyBody = { text: string; attachments: string[]; threadId: string | null; replyTo: string[] };
 
 const uuid = /^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i;
 function json(body: unknown, status = 200) {
@@ -73,12 +73,61 @@ function belongsToMailbox(message: ListReceivingEmail, mailbox: string) {
   });
 }
 
-export async function readReplies(request: Request, settings: { password?: string; apiKey?: string; mailbox: string }) {
-  if (!settings.password) return json({ error: "Set INBOX_PASSWORD in the server environment and redeploy to unlock Replies." }, 503);
-  const expires = sessionExpiry(request, settings.password);
-  if (!expires && !passwordMatches(request, settings.password)) {
-    return json({ error: "Enter your inbox password." }, 401);
+function inboxAccess(request: Request, password?: string) {
+  if (!password) return json({ error: "Set INBOX_PASSWORD in the server environment and redeploy to unlock Replies." }, 503);
+  const expires = sessionExpiry(request, password);
+  if (!expires && !passwordMatches(request, password)) return json({ error: "Enter your inbox password." }, 401);
+  return expires;
+}
+
+
+function headerIds(value: string) {
+  return (value.match(/<[^<>\s@\x00-\x1f\x7f]+@[^<>\s@\x00-\x1f\x7f]+>/g) || []).filter(id => id.length < 450);
+}
+
+function threadTarget(email: GetReceivingEmailResponseSuccess) {
+  const headers = Object.fromEntries(Object.entries(email.headers || {}).map(([key, value]) => [key.toLowerCase(), value]));
+  const raw = (email.message_id || headers["message-id"] || "").trim();
+  const [parent] = headerIds(raw.startsWith("<") ? raw : "<" + raw + ">");
+  const recipients = email.reply_to?.length ? email.reply_to : [email.from];
+  const to = recipients.map(item => (item.match(/<([^<>]+)>\s*$/)?.[1] || item).trim());
+  if (!parent || !to.length || to.length > 50 || to.some(address => !/^[^\s@,;<>]+@[^\s@,;<>]+\.[^\s@,;<>]+$/.test(address))) return null;
+  const prior = headerIds(headers.references || "");
+  if (!prior.length) prior.push(...headerIds(headers["in-reply-to"] || ""));
+  const chain = [...new Set([...prior.filter(id => id !== parent), parent])];
+  while (chain.length > 2 && chain.join(" ").length > 950) chain.splice(1, 1);
+  const original = (email.subject || "").replace(/[\r\n]+/g, " ").trim();
+  const subject = (/^re:/i.test(original) ? original : "Re: " + (original || "(No subject)")).slice(0, 500);
+  return { to, subject, threadId: chain[0], headers: { "In-Reply-To": parent, References: chain.join(" ") } };
+}
+
+async function getInbound(resend: Resend, id: string, mailbox: string) {
+  const { data, error } = await resend.emails.receiving.get(id, { html_format: "cid" }, { signal: AbortSignal.timeout(12000) });
+  if (error) return providerError(error);
+  if (!belongsToMailbox(data, mailbox)) return json({ error: "Reply not found." }, 404);
+  return data;
+}
+
+export async function resolveReplyTarget(request: Request, settings: { password?: string; apiKey?: string; mailbox: string }) {
+  const access = inboxAccess(request, settings.password);
+  if (access instanceof Response) return access;
+  const origin = request.headers.get("origin");
+  if (origin && origin !== new URL(request.url).origin) return json({ error: "Invalid request origin." }, 403);
+  const id = new URL(request.url).searchParams.get("id") || "";
+  if (!uuid.test(id)) return json({ error: "Select a valid incoming message." }, 400);
+  if (!settings.apiKey || !settings.mailbox) return json({ error: "Configure the receiving mailbox first." }, 503);
+  try {
+    const email = await getInbound(new Resend(settings.apiKey), id, settings.mailbox);
+    if (email instanceof Response) return email;
+    return threadTarget(email) || json({ error: "The incoming message has no usable reply address or Message-ID." }, 422);
+  } catch {
+    return json({ error: "Could not load the original message. Try again." }, 502);
   }
+}
+
+export async function readReplies(request: Request, settings: { password?: string; apiKey?: string; mailbox: string }) {
+  const expires = inboxAccess(request, settings.password);
+  if (expires instanceof Response) return expires;
   const response = await mailboxResponse(request, settings);
   // Also upgrades valid cookies from the original seven-day login.
   if (expires && expires - Date.now() / 1000 < sessionSeconds - day) writeSession(response, request, settings.password);
@@ -130,14 +179,14 @@ async function mailboxResponse(request: Request, settings: { apiKey?: string; ma
       return await sentStatuses(resend, [...new Set(params.getAll("receipt"))]);
     }
     if (id) {
-      const { data, error } = await resend.emails.receiving.get(id, { html_format: "cid" }, options);
-      if (error) return providerError(error);
-      if (!belongsToMailbox(data, settings.mailbox)) return json({ error: "Reply not found." }, 404);
+      const data = await getInbound(resend, id, settings.mailbox);
+      if (data instanceof Response) return data;
+      const target = threadTarget(data);
       const text = data.text?.trim() ? data.text : convert(data.html || "", {
         wordwrap: false,
         selectors: [{ selector: "img", format: "skip" }, { selector: "a", options: { ignoreHref: true } }],
       });
-      return json({ text, attachments: (data.attachments || []).map(file => file.filename || "Unnamed attachment") } satisfies ReplyBody);
+      return json({ text, threadId: target?.threadId || null, replyTo: target?.to || [], attachments: (data.attachments || []).map(file => file.filename || "Unnamed attachment") } satisfies ReplyBody);
     }
 
     // This SDK version's receiving.list() omits Resend's recipient filter.

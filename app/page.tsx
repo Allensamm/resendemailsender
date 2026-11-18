@@ -3,15 +3,12 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { ArrowUpRight, Eye, FilePenLine,  Plane, Send, ShieldCheck, Stamp, X } from "lucide-react";
 
-import { SentMail, type Receipt } from "./sent-mail";
+import { isDraft, readReceipts, saveReceipt, type Draft, type Receipt } from "./receipts";
+import { SentMail } from "./sent-mail";
 import { WorkspaceHeader } from "./workspace-header";
 
-type Draft = { to: string; cc: string; bcc: string; subject: string; message: string };
 const empty: Draft = { to: "", cc: "", bcc: "", subject: "", message: "" };
 const draftKey = "letterpress.draft.v1";
-const historyKey = "letterpress.receipts.v1";
-const isDraft = (value: unknown): value is Draft => Boolean(value && typeof value === "object" && Object.keys(empty).every(k => typeof (value as Record<string, unknown>)[k] === "string"));
-const isReceipt = (v: unknown): v is Receipt => isDraft(v) && ["id", "at", "from"].every(k => typeof (v as Record<string, unknown>)[k] === "string");
 function readLocal(key: string) {
   try { return JSON.parse(localStorage.getItem(key) || "null"); } catch { return null; }
 }
@@ -55,8 +52,7 @@ export default function Home() {
       setDraft(saved.draft); setCc(Boolean(saved.draft.cc)); setBcc(Boolean(saved.draft.bcc));
     }
     setToken(typeof saved?.token === "string" && saved.token ? saved.token : "send-email/" + crypto.randomUUID());
-    const receipts = readLocal(historyKey);
-    if (Array.isArray(receipts)) setHistory(receipts.filter(isReceipt));
+    setHistory(readReceipts());
     setReady(true);
     fetch("/api/sender").then(r => r.json()).then(s => setFrom((s as { from: string }).from || "Configure sender address")).catch(() => setFrom("Sender unavailable"));
     return () => window.removeEventListener("hashchange", selectView);
@@ -78,9 +74,7 @@ export default function Home() {
       const data = await result.json() as { id?: string; error?: string };
       if (!result.ok || !data.id) throw new Error(data.error || "The server could not confirm this send.");
       const receipt = { ...draft, id: data.id, at: new Date().toISOString(), from };
-      const previous = readLocal(historyKey);
-      const records = [receipt, ...(Array.isArray(previous) ? previous.filter(isReceipt) : history).filter(r => r.id !== data.id)].slice(0, 30);
-      setHistory(records); persist(historyKey, records); reset();
+      setHistory(saveReceipt(receipt, history)); reset();
       setNotice({ ok: true, text: "Resend accepted your email. Its message ID is in Sent mail." });
     } catch (error) {
       setNotice({ ok: false, text: error instanceof TypeError ? "Connection interrupted. Retry this draft to confirm the send." : error instanceof Error ? error.message : "Send failed. Please try again." });

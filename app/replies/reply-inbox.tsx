@@ -1,9 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { ChevronLeft, Inbox, LockKeyhole, Mail, MailOpen, Paperclip, RefreshCw } from "lucide-react";
+import { ChevronLeft, Inbox, LockKeyhole, Mail, MailOpen, RefreshCw } from "lucide-react";
 import type { ReplyBody, ReplyPage, ReplySummary } from "../../lib/read-replies";
 
+import { ReplyConversation } from "./reply-conversation";
 import { markRead, onInboxChange, sessionChanged } from "./read-state";
 
 class InboxError extends Error {
@@ -126,9 +127,7 @@ export function ReplyInbox({ passwordConfigured }: { passwordConfigured: boolean
      selected ? <article className="reply-reader">
       <button type="button" className="inbox-control" onClick={() => { setSelected(null); setError(""); }}><ChevronLeft size={15}/>All replies</button>
       <h3>{selected.message.subject || "(No subject)"}</h3>
-      <p className="reply-meta">From {selected.message.from} · {new Date(selected.message.date).toLocaleString()}</p>
-      <div className="reply-text">{selected.body.text || "This message has no text body."}</div>
-      {selected.body.attachments.length > 0 && <div className="reply-files"><Paperclip size={15}/>{selected.body.attachments.join(", ")}</div>}
+      <ReplyConversation key={selected.message.id} message={selected.message} body={selected.body}/>
     </article> : <>
       <div className="mailbox-label"><Mail size={14}/>{page.mailbox}</div>
       {page.messages.map(message => <article className="receipt" key={message.id}>

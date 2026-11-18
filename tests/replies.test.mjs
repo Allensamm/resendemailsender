@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { inboxSession, readReplies } from "../lib/read-replies.ts";
+import { inboxSession, readReplies, resolveReplyTarget } from "../lib/read-replies.ts";
 import { replyMailbox, sendEmail } from "../lib/send-email.ts";
 
 const settings = { password: "private inbox", apiKey: "mock", mailbox: "replies@team.resend.app" };
@@ -8,7 +8,7 @@ const id = "ab5eaa10-55aa-4e3a-a59a-0728a4f66ad5";
 const otherId = "c86ecfd1-3b68-4b77-ab05-4fdcb37c0569";
 const sample = {
   id, from: "delivered@resend.dev", to: [settings.mailbox], subject: "Re: Hello",
-  created_at: "2026-11-18T10:30:00Z", attachments: [], html: null, text: "Thank you!",
+  created_at: "2026-11-18T10:30:00Z", attachments: [], html: null, text: "Thank you!", message_id: "<parent@example.org>",
 };
 function request(query = "", password = settings.password) {
   return new Request("https://example.org/api/replies" + query, {
@@ -45,7 +45,7 @@ test("opens the matching reply as text and rejects IDs from other mailboxes", as
     ...sample, text: null, html: '<p>Got it &amp; thanks.</p><img src="https://tracker.example/a"><script>bad()</script>',
   }));
   const response = await readReplies(request("?id=" + id), settings);
-  assert.deepEqual(await response.json(), { text: "Got it & thanks.", attachments: [] });
+  assert.deepEqual(await response.json(), { text: "Got it & thanks.", attachments: [], threadId: "<parent@example.org>", replyTo: ["delivered@resend.dev"] });
   transport.mock.mockImplementation(async () => Response.json({ ...sample, to: ["other@team.resend.app"] }));
   assert.equal((await readReplies(request("?id=" + id), settings)).status, 404);
 });
@@ -125,4 +125,44 @@ test("sent status is private and returns only requested message IDs and latest e
   assert.deepEqual(await (await readReplies(request(old), settings)).json(), { events: { [otherId]: "opened" } });
   transport.mock.mockImplementation(async () => Response.json({ name: "not_found", statusCode: 404, message: "Gone" }, { status: 404 }));
   assert.deepEqual(await (await readReplies(request(old), settings)).json(), { events: {} });
+});
+
+test("a threaded response uses the provider's Reply-To, original Message-ID and reference chain", async t => {
+  const mail = { ...sample, reply_to: ["Reader <bounced@resend.dev>"], headers: { References: "<root@example.org> <middle@example.org>" } };
+  let sent;
+  t.mock.method(globalThis, "fetch", async (url, options) => {
+    if (new URL(url).pathname === "/emails/receiving/" + id) return Response.json(mail);
+    sent = JSON.parse(options.body);
+    assert.equal(new Headers(options.headers).get("idempotency-key"), "reply/test");
+    return Response.json({ id: otherId });
+  });
+  const req = new Request("https://example.org/api/replies/send?id=" + id, {
+    method: "POST", headers: { authorization: "Bearer " + encodeURIComponent(settings.password), "content-type": "application/json", "idempotency-key": "reply/test" },
+    body: JSON.stringify({ message: "Yes, Thursday works.", to: "ignored@example.org", bcc: "ignored@example.org", subject: "Ignored", headers: { References: "ignored" } }),
+  });
+  const target = await resolveReplyTarget(req, settings);
+  assert.equal(target.threadId, "<root@example.org>");
+  const response = await sendEmail(req, { RESEND_FROM: "hello@example.org", RESEND_REPLY_TO: settings.mailbox, RESEND_API_KEY: "mock" }, target);
+  assert.equal(response.status, 200);
+  assert.deepEqual(sent.to, ["bounced@resend.dev"]);
+  assert.equal(sent.bcc, undefined);
+  assert.equal(sent.subject, "Re: Hello");
+  assert.equal(sent.reply_to, settings.mailbox);
+  assert.deepEqual(sent.headers, { "In-Reply-To": "<parent@example.org>", References: "<root@example.org> <middle@example.org> <parent@example.org>" });
+});
+test("reply target is protected, mailbox-scoped, and requires a real parent message ID", async t => {
+  const transport = t.mock.method(globalThis, "fetch", async () => Response.json({ ...sample, to: ["other@team.resend.app"] }));
+  const query = "?id=" + id;
+  assert.equal((await resolveReplyTarget(request(query, "wrong"), settings)).status, 401);
+  const cross = request(query); cross.headers.set("origin", "https://other.example");
+  assert.equal((await resolveReplyTarget(cross, settings)).status, 403);
+  assert.equal(transport.mock.callCount(), 0);
+  assert.equal((await resolveReplyTarget(request(query), settings)).status, 404);
+  transport.mock.mockImplementation(async () => Response.json({ ...sample, message_id: "" }));
+  assert.equal((await resolveReplyTarget(request(query), settings)).status, 422);
+  transport.mock.mockImplementation(async () => Response.json({ ...sample, subject: "First message", headers: { "In-Reply-To": "<root@example.org>" } }));
+  const target = await resolveReplyTarget(request(query), settings);
+  assert.deepEqual(target.to, [sample.from]);
+  assert.equal(target.threadId, "<root@example.org>");
+  assert.equal(target.subject, "Re: First message");
 });

@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { Check, Inbox, Mail, MailOpen, PenLine, RefreshCw } from "lucide-react";
 import { onInboxChange } from "./replies/read-state";
 
-export type Receipt = { id: string; at: string; from: string; to: string; cc: string; bcc: string; subject: string; message: string };
+import type { Receipt } from "./receipts";
 
 const labels: Record<string, [string, string, string]> = {
   accepted: ["Accepted", "neutral", "Resend accepted this message for sending."],

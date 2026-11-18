@@ -31,7 +31,14 @@ function messageHtml(message: string) {
   return '<div style="white-space:pre-wrap">' + escaped + "</div>";
 }
 
-export async function sendEmail(request: Request, settings: MailSettings) {
+export type ThreadTarget = {
+  to: string[];
+  subject: string;
+  threadId: string;
+  headers: { "In-Reply-To": string; References: string };
+};
+
+export async function sendEmail(request: Request, settings: MailSettings, thread?: ThreadTarget) {
   const origin = request.headers.get("origin");
   if (origin && origin !== new URL(request.url).origin) return fail("Request origin is invalid.", 403);
   if (request.headers.get("content-type")?.split(";")[0] !== "application/json")
@@ -43,10 +50,11 @@ export async function sendEmail(request: Request, settings: MailSettings) {
     return fail("The message could not be read.", 400);
   }
   if (!isRecord(data)) return fail("Enter a recipient, subject, and message.", 400);
+  const envelope = thread ? { to: thread.to.join(","), cc: "", bcc: "", subject: thread.subject } : data;
   const recipients: { to: string[]; cc?: string[]; bcc?: string[] } = { to: [] };
   let count = 0;
   for (const field of ["to", "cc", "bcc"] as const) {
-    const raw = data[field] ?? "";
+    const raw = envelope[field] ?? "";
     if (typeof raw !== "string" || raw.length > 16000) return fail("Check the recipient addresses.", 400);
     const list = raw.trim() ? raw.split(",").map(item => item.trim()) : [];
     if (field === "to" && !list.length) return fail("Add a recipient in the To field.", 400);
@@ -56,7 +64,7 @@ export async function sendEmail(request: Request, settings: MailSettings) {
     count += list.length;
   }
   if (count > 50) return fail("Use up to 50 recipients per message.", 400);
-  if (typeof data.subject !== "string" || !data.subject.trim() || data.subject.length > 500 || /[\r\n]/.test(data.subject))
+  if (typeof envelope.subject !== "string" || !envelope.subject.trim() || envelope.subject.length > 500 || /[\r\n]/.test(envelope.subject))
     return fail("Enter a subject of up to 500 characters.", 400);
   if (typeof data.message !== "string" || !data.message.trim() || data.message.length > 50000)
     return fail("Enter a message of up to 50,000 characters.", 400);
@@ -70,12 +78,12 @@ export async function sendEmail(request: Request, settings: MailSettings) {
   const resend = new Resend(settings.RESEND_API_KEY);
   try {
     const { data: receipt, error } = await resend.emails.send(
-      { from, replyTo, ...recipients, subject: data.subject.trim(), text: data.message, html: messageHtml(data.message) },
+      { from, replyTo, ...recipients, ...(thread && { headers: thread.headers }), subject: envelope.subject.trim(), text: data.message, html: messageHtml(data.message) },
       { idempotencyKey: token, signal: AbortSignal.timeout(15000) },
     );
     if (error) return fail(error.message, error.statusCode ?? 502);
     if (!receipt?.id) return fail("Resend did not return a message ID. Retry to confirm this send.", 502);
-    return Response.json({ id: receipt.id });
+    return Response.json({ id: receipt.id, ...(thread && { from, to: recipients.to.join(", "), subject: thread.subject }) });
   } catch {
     return fail("Could not confirm the send with Resend. Retry this draft to check the same request.", 502);
   }

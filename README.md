@@ -34,6 +34,10 @@ Open `/replies` or select **Replies** in the navigation. Set the following Produ
 
 The **Replies** tab shows an unread badge while the inbox is unlocked. It checks every 30 seconds on visible pages and when you return to the app. Opening a reply marks it as read in this browser. The count displays up to **99+**. Use **Refresh** to update the message list. The message list and detail endpoint are both password-protected and scoped to the receiving address. Messages stay in Resend and appear as plain text in the browser. Replies to older mail go to the address in the original message. Mail delivered to an existing external mailbox appears here only if it is forwarded to the configured receiving address. [Resend receiving setup](https://resend.com/docs/dashboard/receiving/introduction)
 
+### Reply in a conversation
+
+Open an incoming message and choose **Reply**. Check the displayed recipient, write your response and select **Send reply**. The server reads the original message from the protected inbox and uses its Reply-To or From address. Each response carries the original Internet Message-ID in In-Reply-To and preserves the References chain and subject. Further replies return to the same receiving mailbox. The conversation view includes responses saved in this browser’s Sent mail history. Expand an earlier incoming message to read its content from Resend. [Resend threading guide](https://resend.com/docs/dashboard/receiving/reply-to-emails)
+
 ## Private Sites configuration
 
 Keep the Site owner-private. Its access policy controls who can use the send endpoint. Configure `RESEND_API_KEY` as a runtime secret and `RESEND_FROM` as a runtime variable, then redeploy. For a deployment outside private Sites, protect the entire app and its API with authentication before exposing it to the internet.
