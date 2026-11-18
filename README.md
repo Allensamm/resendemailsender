@@ -23,7 +23,7 @@ Deploy the repository root. The checked-in Vercel configuration runs the native 
 Open `/replies` or select **Replies** in the navigation. Set the following Production variables in Vercel and redeploy.
 
 - **INBOX_PASSWORD** is a new password from your password manager. Save it as a Sensitive variable. Enter it on the Replies page to open the inbox. Lock the inbox when done.
-- **RESEND_REPLY_TO** is the receiving email address for new outgoing messages. In Resend, open **Emails → Receiving → ⋯ → Receiving address** and copy the assigned domain. Use an address such as `replies@<your-assigned-domain>.resend.app`. A custom receiving address also works when its incoming mail is routed to Resend. Without an override, the app uses the sender address for replies.
+- New emails sent from `sovernpartners.com` direct replies to `replies@kronaesaex.resend.app`. The Replies inbox reads that same address. Set **RESEND_REPLY_TO** only to override the receiving address. Other sender domains default to their sender mailbox.
 - The existing **RESEND_API_KEY** must have Full access for the server to read received mail. An in-place permission change uses the same key.
 
 Use **Refresh** to check for new messages. The message list and detail endpoint are both password-protected and scoped to the receiving address. Messages stay in Resend and appear as plain text in the browser. Replies to older mail go to the address in the original message. Mail delivered to an existing external mailbox appears here only if it is forwarded to the configured receiving address. [Resend receiving setup](https://resend.com/docs/dashboard/receiving/introduction)
