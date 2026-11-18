@@ -1,6 +1,6 @@
 import { Resend } from "resend";
 
-export type MailSettings = { RESEND_API_KEY?: string; RESEND_FROM?: string };
+export type MailSettings = { RESEND_API_KEY?: string; RESEND_FROM?: string; RESEND_REPLY_TO?: string };
 
 export function senderAddress(settings: MailSettings, production = process.env.NODE_ENV === "production") {
   const sender = settings.RESEND_FROM?.trim() || (production ? "" : "onboarding@resend.dev");
@@ -8,6 +8,13 @@ export function senderAddress(settings: MailSettings, production = process.env.N
   if (!validAddress.test(mailbox) || /[\r\n]/.test(sender)) return "";
   if (production && mailbox.toLowerCase().endsWith("@resend.dev")) return "";
   return sender;
+}
+
+export function replyMailbox(settings: MailSettings) {
+  const replyTo = settings.RESEND_REPLY_TO?.trim();
+  const sender = senderAddress(settings);
+  const address = replyTo || sender.match(/<([^<>]+)>$/)?.[1] || sender;
+  return validAddress.test(address) ? address.toLowerCase() : "";
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -51,10 +58,12 @@ export async function sendEmail(request: Request, settings: MailSettings) {
   if (!settings.RESEND_API_KEY) return fail("Add RESEND_API_KEY to the server environment to enable sending. Your draft is still here.", 503);
   const from = senderAddress(settings);
   if (!from) return fail("Set RESEND_FROM to an address on your verified Resend domain.", 503);
+  const replyTo = settings.RESEND_REPLY_TO?.trim();
+  if (replyTo && !replyMailbox(settings)) return fail("Set RESEND_REPLY_TO to a valid receiving address.", 503);
   const resend = new Resend(settings.RESEND_API_KEY);
   try {
     const { data: receipt, error } = await resend.emails.send(
-      { from, ...recipients, subject: data.subject.trim(), text: data.message },
+      { from, ...(replyTo ? { replyTo } : {}), ...recipients, subject: data.subject.trim(), text: data.message },
       { idempotencyKey: token, signal: AbortSignal.timeout(15000) },
     );
     if (error) return fail(error.message, error.statusCode ?? 502);

@@ -18,6 +18,16 @@ Put your key in `RESEND_API_KEY` in the ignored `.dev.vars` file. Set `RESEND_FR
 
 Deploy the repository root. The checked-in Vercel configuration runs the native Next.js build and serves the composer at `/`. The page loads before Resend credentials are configured. Protect the deployment before enabling email sending, then configure the server variables `RESEND_API_KEY` and `RESEND_FROM` in the Vercel project and redeploy.
 
+## Replies
+
+Open `/replies` or select **Replies** in the navigation. Set the following Production variables in Vercel and redeploy.
+
+- **INBOX_PASSWORD** is a new password from your password manager. Save it as a Sensitive variable. Enter it on the Replies page to open the inbox. Lock the inbox when done.
+- **RESEND_REPLY_TO** is the receiving email address for new outgoing messages. In Resend, open **Emails → Receiving → ⋯ → Receiving address** and copy the assigned domain. Use an address such as `replies@<your-assigned-domain>.resend.app`. A custom receiving address also works when its incoming mail is routed to Resend. Without an override, the app uses the sender address for replies.
+- The existing **RESEND_API_KEY** must have Full access for the server to read received mail. An in-place permission change uses the same key.
+
+Use **Refresh** to check for new messages. The message list and detail endpoint are both password-protected and scoped to the receiving address. Messages stay in Resend and appear as plain text in the browser. Replies to older mail go to the address in the original message. Mail delivered to an existing external mailbox appears here only if it is forwarded to the configured receiving address. [Resend receiving setup](https://resend.com/docs/dashboard/receiving/introduction)
+
 ## Private Sites configuration
 
 Keep the Site owner-private. Its access policy controls who can use the send endpoint. Configure `RESEND_API_KEY` as a runtime secret and `RESEND_FROM` as a runtime variable, then redeploy. For a deployment outside private Sites, protect the entire app and its API with authentication before exposing it to the internet.
@@ -25,7 +35,7 @@ Keep the Site owner-private. Its access policy controls who can use the send end
 ## Verification
 
 ```sh
-node --experimental-strip-types --test tests/send-email.test.mjs
+node --experimental-strip-types --test tests/*.test.mjs
 npm run build
 ```
 

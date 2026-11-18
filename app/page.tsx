@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { ArrowUpRight, Check, Eye, FilePenLine, Inbox, Mail, MailOpen, PenLine, Plane, Send, ShieldCheck, Stamp, X } from "lucide-react";
 
+import { WorkspaceHeader } from "./workspace-header";
+
 type Draft = { to: string; cc: string; bcc: string; subject: string; message: string };
 type Receipt = Draft & { id: string; at: string; from: string };
 const empty: Draft = { to: "", cc: "", bcc: "", subject: "", message: "" };
@@ -46,6 +48,9 @@ export default function Home() {
   const [shown, setShown] = useState<string | null>(null);
   const [discard, setDiscard] = useState(false);
   useEffect(() => {
+    const selectView = () => setView(location.hash === "#sent" ? "sent" : "compose");
+    selectView();
+    window.addEventListener("hashchange", selectView);
     const saved = readLocal(draftKey);
     if (isDraft(saved?.draft)) {
       setDraft(saved.draft); setCc(Boolean(saved.draft.cc)); setBcc(Boolean(saved.draft.bcc));
@@ -55,6 +60,7 @@ export default function Home() {
     if (Array.isArray(receipts)) setHistory(receipts.filter(isReceipt));
     setReady(true);
     fetch("/api/sender").then(r => r.json()).then(s => setFrom((s as { from: string }).from || "Configure sender address")).catch(() => setFrom("Sender unavailable"));
+    return () => window.removeEventListener("hashchange", selectView);
   }, []);
   useEffect(() => { if (ready) persist(draftKey, { draft, token }); }, [draft, token, ready]);
 
@@ -83,11 +89,7 @@ export default function Home() {
   }
 
   return <>
-    <header className="top"><div className="top-inner">
-      <a className="brand" href="/" aria-label="Letterpress home"><span className="logo"><Send size={23} strokeWidth={2}/></span>Letterpress</a>
-      <nav aria-label="Workspace"><button onClick={() => setView("compose")} className={view === "compose" ? "selected" : ""}><PenLine/>Compose</button><button onClick={() => setView("sent")} className={view === "sent" ? "selected" : ""}><Inbox/>Sent mail</button></nav>
-      <a className="docs" href="https://resend.com/docs" target="_blank" rel="noreferrer">Resend docs <ArrowUpRight size={15}/></a>
-    </div></header>
+    <WorkspaceHeader current={view}/>
     <main>
       <div className="page-heading"><h1>{view === "compose" ? "Compose email" : "Sent mail"}<span>.</span></h1>
         <p>{view === "compose" ? "Write your message, check the preview, and send it on its way." : "Emails accepted by Resend from this browser."}</p>
@@ -117,7 +119,7 @@ export default function Home() {
             <div className="preview-body"><h3>{draft.subject || "Your subject line"}</h3><p className={draft.message ? "" : "muted"}>{draft.message || "Your message will appear here as you type."}</p></div></div>
         </section><div className="privacy"><ShieldCheck size={15}/><span>Sent securely through Resend</span></div></aside>
       </div> : <section className="card sent"><header className="card-heading"><span className="tile"><Inbox/></span><h2>Sent messages</h2><span className="count">{history.length}</span></header>
-        {history.length === 0 ? <div className="empty"><MailOpen size={38}/><h3>No sent messages yet</h3><p>Your sent messages will appear here after Resend accepts them.</p><button className="primary" onClick={() => setView("compose")}><PenLine size={16}/>Compose email</button></div> :
+        {history.length === 0 ? <div className="empty"><MailOpen size={38}/><h3>No sent messages yet</h3><p>Your sent messages will appear here after Resend accepts them.</p><button className="primary" onClick={() => { location.hash = ""; setView("compose"); }}><PenLine size={16}/>Compose email</button></div> :
           history.map(r => <article className="receipt" key={r.id}><button aria-expanded={shown === r.id} onClick={() => setShown(shown === r.id ? null : r.id)}><Mail size={18}/><span><b>{r.subject}</b><small>{r.to}</small></span><time>{new Date(r.at).toLocaleDateString()}</time></button>
             {shown === r.id && <div className="details"><small>From {r.from}</small>{r.cc && <small>Cc {r.cc}</small>}{r.bcc && <small>Bcc {r.bcc}</small>}<p>{r.message}</p><small><Check size={14}/> Accepted · {r.id}</small></div>}</article>)}
       </section>}
