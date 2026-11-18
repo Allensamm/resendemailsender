@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { Paperclip, Reply, Send } from "lucide-react";
+import { Paperclip, Reply, Send, Trash2 } from "lucide-react";
 import type { ReplyBody, ReplySummary } from "../../lib/read-replies";
 import { readReceipts, saveReceipt, type Receipt } from "../receipts";
+
+import { isDeleted } from "./read-state";
 
 type Parent = NonNullable<Receipt["parent"]>;
 
@@ -45,7 +47,9 @@ function EarlierMessage({ parent }: { parent: Parent }) {
   </div>;
 }
 
-export function ReplyConversation({ message, body }: { message: ReplySummary; body: ReplyBody }) {
+export function ReplyConversation({ message, body, messages, bodies, onDelete }: {
+  message: ReplySummary; body: ReplyBody; messages: ReplySummary[]; bodies: Record<string, ReplyBody>; onDelete: (ids: string[]) => void;
+}) {
   const [history, setHistory] = useState<Receipt[]>([]);
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState("");
@@ -95,23 +99,26 @@ export function ReplyConversation({ message, body }: { message: ReplySummary; bo
     } finally { pending.current = false; setBusy(false); }
   }
 
-  const entries = [{ id: message.id, at: message.date, content:
-    <MessageBubble sender={message.from} date={message.date} text={body.text} attachments={body.attachments}/>
-  }];
-  const included = new Set([message.id]);
-  for (const receipt of history.filter(r => body.threadId && r.threadId === body.threadId)) {
+  const entries = messages.filter(item => !isDeleted(item.id)).map(item => ({ id: item.id, at: item.date, content:
+    item.id === message.id ? <MessageBubble sender={item.from} date={item.date} text={body.text} attachments={body.attachments}/> :
+    bodies[item.id] ? <MessageBubble sender={item.from} date={item.date} text={bodies[item.id].text} attachments={bodies[item.id].attachments}/> :
+    <EarlierMessage parent={item}/>
+  }));
+  const included = new Set(messages.map(item => item.id));
+  const references = new Set(messages.flatMap(item => [bodies[item.id]?.threadId, ...(bodies[item.id]?.referenceIds || [])]));
+  if (body.threadId) references.add(body.threadId);
+  for (const receipt of history.filter(r => (r.threadId && references.has(r.threadId)) || (r.parent && included.has(r.parent.id)))) {
     const parent = receipt.parent;
-    if (parent && !included.has(parent.id)) {
+    if (parent && !included.has(parent.id) && !isDeleted(parent.id)) {
       included.add(parent.id);
       entries.push({ id: parent.id, at: parent.date, content: <EarlierMessage parent={parent}/> });
     }
-    entries.push({ id: receipt.id, at: receipt.at, content:
+    if (!isDeleted(receipt.id)) entries.push({ id: receipt.id, at: receipt.at, content:
       <MessageBubble sender="You" date={receipt.at} text={receipt.message} outgoing/> });
-
   }
   entries.sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
   return <>
-    <div className="thread-messages">{entries.map(item => <div key={item.id}>{item.content}</div>)}</div>
+    <div className="thread-messages">{entries.map(item => <div className="thread-message-wrap" key={item.id}>{item.content}<button type="button" className="inbox-control thread-delete" aria-label="Delete message from this browser" disabled={busy} onClick={() => onDelete([item.id])}><Trash2 size={13}/>Delete</button></div>)}</div>
     {notice && <p className="thread-feedback" role="status">{notice}</p>}
     {!body.threadId || !body.replyTo.length ? <p className="reply-meta">This email has no usable reply address or original Message-ID.</p> :
       !editing ? <button type="button" className="primary" onClick={() => { setEditing(true); setNotice(""); }}><Reply size={15}/>Reply</button> :

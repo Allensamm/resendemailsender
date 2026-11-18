@@ -4,7 +4,7 @@ import { Resend, type ErrorResponse, type GetReceivingEmailResponseSuccess, type
 
 export type ReplySummary = { id: string; from: string; subject: string; date: string };
 export type ReplyPage = { mailbox: string; messages: ReplySummary[]; next: string | null };
-export type ReplyBody = { text: string; attachments: string[]; threadId: string | null; replyTo: string[] };
+export type ReplyBody = { text: string; attachments: string[]; threadId: string | null; replyTo: string[]; referenceIds?: string[] };
 
 const uuid = /^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i;
 function json(body: unknown, status = 200) {
@@ -186,7 +186,9 @@ async function mailboxResponse(request: Request, settings: { apiKey?: string; ma
         wordwrap: false,
         selectors: [{ selector: "img", format: "skip" }, { selector: "a", options: { ignoreHref: true } }],
       });
-      return json({ text, threadId: target?.threadId || null, replyTo: target?.to || [], attachments: (data.attachments || []).map(file => file.filename || "Unnamed attachment") } satisfies ReplyBody);
+      const headers = Object.fromEntries(Object.entries(data.headers || {}).map(([key, value]) => [key.toLowerCase(), value]));
+      const referenceIds = headerIds([data.message_id, headers["message-id"], headers.references, headers["in-reply-to"]].filter(Boolean).map(value => value!.includes("<") ? value : "<" + value + ">").join(" "));
+      return json({ text, referenceIds, threadId: target?.threadId || null, replyTo: target?.to || [], attachments: (data.attachments || []).map(file => file.filename || "Unnamed attachment") } satisfies ReplyBody);
     }
 
     // This SDK version's receiving.list() omits Resend's recipient filter.

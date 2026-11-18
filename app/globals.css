@@ -54,3 +54,10 @@ footer{border-top:1px solid #dcdedc;margin:37px 0 20px;padding-top:17px;display:
 .thread-attachment svg{flex-shrink:0;color:#4c705a}
 .thread-actions{display:flex;gap:10px;align-items:center}.thread-compose{display:grid;gap:12px}.thread-feedback{color:#286242;margin:8px 0 14px}
 @media(max-width:560px){.thread-messages{padding:12px;margin:16px -6px;gap:10px}.thread-item{max-width:94%;padding:10px 12px 7px}}
+
+.inbox-conversation-row { display: flex; align-items: center; }
+.inbox-conversation-row > button:first-child { flex: 1; min-width: 0; }
+.inbox-conversation-row > .delete-conversation { width: auto; flex: 0 0 auto; padding: 14px; color: #8b5555; }
+.thread-message-wrap { display: flex; flex-direction: column; align-items: stretch; }
+.thread-delete { align-self: center; font-size: 11px; opacity: .65; margin-top: 3px; }
+.thread-delete:hover, .thread-delete:focus-visible { opacity: 1; color: #a23f3f; }

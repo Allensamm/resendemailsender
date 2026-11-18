@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { onInboxChange, wasRead } from "./read-state";
+import { isDeleted, onInboxChange, wasRead } from "./read-state";
 
 type BadgePage = { ids: string[]; next: string | null };
 
@@ -15,7 +15,7 @@ export function ReplyBadge() {
     let locked = false;
     const unread = (ids: Set<string>) => {
       let total = 0;
-      for (const id of ids) if (!wasRead(id)) total++;
+      for (const id of ids) if (!wasRead(id) && !isDeleted(id)) total++;
       return total;
     };
     function clear() {
@@ -55,7 +55,7 @@ export function ReplyBadge() {
     const unsubscribe = onInboxChange(change => {
       if (change === "lock") { locked = true; clear(); }
       if (change === "unlock") { clear(); locked = false; void refresh(); }
-      if (change === "read") {
+      if (change === "read" || change === "deleted") {
         const value = unread(known);
         setCount(value);
         if (more && value < 100) void refresh();

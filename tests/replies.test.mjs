@@ -45,7 +45,7 @@ test("opens the matching reply as text and rejects IDs from other mailboxes", as
     ...sample, text: null, html: '<p>Got it &amp; thanks.</p><img src="https://tracker.example/a"><script>bad()</script>',
   }));
   const response = await readReplies(request("?id=" + id), settings);
-  assert.deepEqual(await response.json(), { text: "Got it & thanks.", attachments: [], threadId: "<parent@example.org>", replyTo: ["delivered@resend.dev"] });
+  assert.deepEqual(await response.json(), { text: "Got it & thanks.", attachments: [], referenceIds: ["<parent@example.org>"], threadId: "<parent@example.org>", replyTo: ["delivered@resend.dev"] });
   transport.mock.mockImplementation(async () => Response.json({ ...sample, to: ["other@team.resend.app"] }));
   assert.equal((await readReplies(request("?id=" + id), settings)).status, 404);
 });

@@ -36,7 +36,7 @@ The **Replies** tab shows an unread badge while the inbox is unlocked. It checks
 
 ### Reply in a conversation
 
-Open an incoming message and choose **Reply**. Check the displayed recipient, write your response and select **Send reply**. The server reads the original message from the protected inbox and uses its Reply-To or From address. Each response carries the original Internet Message-ID in In-Reply-To and preserves the References chain and subject. Further replies return to the same receiving mailbox. The conversation view includes responses saved in this browser’s Sent mail history. Expand an earlier incoming message to read its content from Resend. [Resend threading guide](https://resend.com/docs/dashboard/receiving/reply-to-emails)
+Open an incoming message and choose **Reply**. Check the displayed recipient, write your response and select **Send reply**. The server reads the original message from the protected inbox and uses its Reply-To or From address. Each response carries the original Internet Message-ID in In-Reply-To and preserves the References chain and subject. Further replies return to the same receiving mailbox. The conversation view includes responses saved in this browser’s Sent mail history. Incoming replies are grouped by their Internet Message-ID, References and In-Reply-To headers, with earlier messages shown as chat bubbles. Matching subjects alone never merge conversations. Use **Load older messages** to include earlier pages in grouping. Messages without thread headers remain separate. [Resend threading guide](https://resend.com/docs/dashboard/receiving/reply-to-emails)
 
 ## Private Sites configuration
 
@@ -50,3 +50,6 @@ npm run build
 ```
 
 The tests use a mock provider. A successful send returns Resend's email ID and indicates acceptance for delivery.
+
+
+Use the trash button on a conversation or **Delete** beneath a message to hide it in this browser. **Undo** restores the last deletion until you leave or reload the page. Hidden incoming messages do not contribute to the unread badge. Hidden outgoing messages are also omitted from Sent mail, while retained receipt data can still connect future replies. Deletions are local browser markers, not Resend API deletions, and do not synchronize to other devices. Clearing site data restores hidden messages from Resend. New replies to a hidden conversation appear normally.

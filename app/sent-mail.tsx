@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Check, Inbox, Mail, MailOpen, PenLine, RefreshCw } from "lucide-react";
-import { onInboxChange } from "./replies/read-state";
+import { isDeleted, onInboxChange } from "./replies/read-state";
 
 import type { Receipt } from "./receipts";
 
@@ -87,6 +87,7 @@ export function SentMail({ history, onCompose }: { history: Receipt[]; onCompose
     }
     function resume() { if (!document.hidden) { authenticated = true; void refresh(); } }
     const unsubscribe = onInboxChange(change => {
+      if (change === "deleted") setRevision(value => value + 1);
       if (change === "lock") forget();
       if (change === "unlock") resume();
     });
@@ -96,14 +97,15 @@ export function SentMail({ history, onCompose }: { history: Receipt[]; onCompose
     return () => { active?.abort(); unsubscribe(); clearInterval(timer); document.removeEventListener("visibilitychange", resume); };
   }, [history, revision]);
 
+  const visibleHistory = history.filter(receipt => !isDeleted(receipt.id));
   return <section className="card sent"><header className="card-heading"><span className="tile"><Inbox/></span><h2>Sent messages</h2>
-    <span className="count">{history.length}</span>
-    {history.length > 0 && <button type="button" className="inbox-control" disabled={busy} onClick={() => setRevision(r => r + 1)}><RefreshCw size={14}/>{busy ? "Updating…" : "Refresh"}</button>}
+    <span className="count">{visibleHistory.length}</span>
+    {visibleHistory.length > 0 && <button type="button" className="inbox-control" disabled={busy} onClick={() => setRevision(r => r + 1)}><RefreshCw size={14}/>{busy ? "Updating…" : "Refresh"}</button>}
   </header>
     {locked && <p className="sent-notice"><a href="/replies">Unlock Replies</a> to see the latest delivery status.</p>}
     {notice && <p className="sent-notice" role="status">{notice} Showing the last known status.</p>}
-    {history.length === 0 ? <div className="empty"><MailOpen size={38}/><h3>No sent messages yet</h3><p>Your sent messages will appear here after Resend accepts them.</p><button className="primary" onClick={onCompose}><PenLine size={16}/>Compose email</button></div> :
-      history.map(r => {
+    {visibleHistory.length === 0 ? <div className="empty"><MailOpen size={38}/><h3>No sent messages yet</h3><p>Your sent messages will appear here after Resend accepts them.</p><button className="primary" onClick={onCompose}><PenLine size={16}/>Compose email</button></div> :
+      visibleHistory.map(r => {
         const event = events[r.id] || "accepted";
         const [label, color, description] = Object.hasOwn(labels, event) ? labels[event] : labels.unavailable;
         return <article className="receipt sent-receipt" key={r.id}>
@@ -114,7 +116,7 @@ export function SentMail({ history, onCompose }: { history: Receipt[]; onCompose
           {shown === r.id && <div className="details"><small>From {r.from}</small>{r.cc && <small>Cc {r.cc}</small>}{r.bcc && <small>Bcc {r.bcc}</small>}<p>{r.message}</p><small>{description}</small><small><Check size={14}/> Accepted · {r.id}</small></div>}
         </article>;
       })}
-    {history.length > 0 && <details className="status-guide"><summary>About delivery labels</summary>
+    {visibleHistory.length > 0 && <details className="status-guide"><summary>About delivery labels</summary>
       <p>Each label shows the latest event for the whole message. Delivered means the receiving server accepted it. Only the recipient’s provider knows which folder it landed in. Reported as spam means a complaint reached Resend.</p>
       <p>Opened means a tracking image loaded. Privacy tools can load it automatically or block it. To record opens on new emails, enable open tracking for your sending domain. <a href="https://resend.com/docs/dashboard/domains/tracking" target="_blank" rel="noreferrer">Tracking settings guide</a></p>
     </details>}
