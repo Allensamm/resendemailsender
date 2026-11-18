@@ -1,12 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { ArrowUpRight, Check, Eye, FilePenLine, Inbox, Mail, MailOpen, PenLine, Plane, Send, ShieldCheck, Stamp, X } from "lucide-react";
+import { ArrowUpRight, Eye, FilePenLine,  Plane, Send, ShieldCheck, Stamp, X } from "lucide-react";
 
+import { SentMail, type Receipt } from "./sent-mail";
 import { WorkspaceHeader } from "./workspace-header";
 
 type Draft = { to: string; cc: string; bcc: string; subject: string; message: string };
-type Receipt = Draft & { id: string; at: string; from: string };
 const empty: Draft = { to: "", cc: "", bcc: "", subject: "", message: "" };
 const draftKey = "letterpress.draft.v1";
 const historyKey = "letterpress.receipts.v1";
@@ -45,7 +45,6 @@ export default function Home() {
   const [busy, setBusy] = useState(false);
   const sending = useRef(false);
   const [notice, setNotice] = useState<{ text: string; ok: boolean } | null>(null);
-  const [shown, setShown] = useState<string | null>(null);
   const [discard, setDiscard] = useState(false);
   useEffect(() => {
     const selectView = () => setView(location.hash === "#sent" ? "sent" : "compose");
@@ -118,11 +117,7 @@ export default function Home() {
           {draft.cc && <><span>CC</span><strong>{draft.cc}</strong></>}{draft.bcc && <><span>BCC</span><strong>{draft.bcc}</strong></>}</div>
             <div className="preview-body"><h3>{draft.subject || "Your subject line"}</h3><p className={draft.message ? "" : "muted"}>{draft.message || "Your message will appear here as you type."}</p></div></div>
         </section><div className="privacy"><ShieldCheck size={15}/><span>Sent securely through Resend</span></div></aside>
-      </div> : <section className="card sent"><header className="card-heading"><span className="tile"><Inbox/></span><h2>Sent messages</h2><span className="count">{history.length}</span></header>
-        {history.length === 0 ? <div className="empty"><MailOpen size={38}/><h3>No sent messages yet</h3><p>Your sent messages will appear here after Resend accepts them.</p><button className="primary" onClick={() => { location.hash = ""; setView("compose"); }}><PenLine size={16}/>Compose email</button></div> :
-          history.map(r => <article className="receipt" key={r.id}><button aria-expanded={shown === r.id} onClick={() => setShown(shown === r.id ? null : r.id)}><Mail size={18}/><span><b>{r.subject}</b><small>{r.to}</small></span><time>{new Date(r.at).toLocaleDateString()}</time></button>
-            {shown === r.id && <div className="details"><small>From {r.from}</small>{r.cc && <small>Cc {r.cc}</small>}{r.bcc && <small>Bcc {r.bcc}</small>}<p>{r.message}</p><small><Check size={14}/> Accepted · {r.id}</small></div>}</article>)}
-      </section>}
+      </div> : <SentMail history={history} onCompose={() => { location.hash = ""; setView("compose"); }}/>}
       <footer><span><Stamp size={15}/>Letterpress</span><span>Powered by <a href="https://resend.com" target="_blank" rel="noreferrer">Resend <ArrowUpRight size={12}/></a></span></footer>
     </main>
   </>;

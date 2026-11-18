@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { sendEmail, senderAddress } from "../lib/send-email.ts";
 
-const draft = { to: "delivered@resend.dev", subject: "Hello", message: "One\nTwo" };
+const draft = { to: "delivered@resend.dev", subject: "Hello", message: "One <two> & three\nFour" };
 const settings = { RESEND_API_KEY: "mock", RESEND_FROM: "Letterpress <hello@sovernpartners.com>" };
 const key = "send-email/test-send";
 function request(data, headers = {}) {
@@ -19,7 +19,7 @@ test("the SDK sends the server sender, recipients and retry identifier and retur
   assert.equal(sent.url, "https://api.resend.com/emails");
   assert.equal(sent.headers.get("Authorization"), "Bearer mock");
   assert.equal(sent.headers.get("Idempotency-Key"), key);
-  assert.deepEqual(sent.body, { from: settings.RESEND_FROM, reply_to: "replies@kronaesaex.resend.app", to: [draft.to], cc: ["bounced@resend.dev", "complained@resend.dev"], subject: draft.subject, text: draft.message });
+  assert.deepEqual(sent.body, { from: settings.RESEND_FROM, reply_to: "replies@kronaesaex.resend.app", to: [draft.to], cc: ["bounced@resend.dev", "complained@resend.dev"], subject: draft.subject, text: draft.message, html: '<div style="white-space:pre-wrap">One &lt;two&gt; &amp; three\nFour</div>' });
 });
 test("production requires a custom sender and local tests can use Resend's sender", () => {
   assert.equal(senderAddress({}, true), "");

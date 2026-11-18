@@ -35,3 +35,9 @@ footer{border-top:1px solid #dcdedc;margin:37px 0 20px;padding-top:17px;display:
 @media(max-width:560px){.top-inner{height:auto;min-height:88px;align-content:center;justify-content:flex-start;flex-wrap:wrap;gap:5px}.top-inner nav{width:100%;height:auto}.inbox-controls{gap:4px}.inbox-control{padding:6px}.inbox-unlock,.reply-reader{padding:18px}}
 
 .reply-badge{display:inline-grid;place-items:center;min-width:19px;height:19px;padding:0 5px;border-radius:20px;background:var(--blue);color:white;font:600 11px/1 var(--sans);font-variant-numeric:tabular-nums}
+.sent-notice{padding:12px 24px;border-bottom:1px solid var(--line);color:var(--muted);line-height:1.5}.sent-notice a{color:var(--blue);text-decoration:underline}
+.sent-receipt button .delivery-label{flex:none;white-space:nowrap;padding:4px 9px;border-radius:20px;font:600 11px/1.4 var(--sans)}
+.delivery-label.neutral{background:#edf0f2;color:#465260}.delivery-label.blue{background:#e9effe;color:#234eac}.delivery-label.green{background:#e7f4eb;color:#2c6547}.delivery-label.amber{background:#fff2d9;color:#775217}.delivery-label.red{background:#fbe8e6;color:#92352c}
+@media(max-width:550px){.sent-receipt>button{display:grid;grid-template-columns:18px minmax(0,1fr) auto;gap:7px 10px}.sent-receipt time{grid-column:2}}
+
+.status-guide{padding:14px 24px;border-top:1px solid var(--line);font-size:12px;color:var(--muted)}.status-guide summary{cursor:pointer}.status-guide p{margin:10px 0 0;max-width:75ch;line-height:1.55}.status-guide a{color:var(--blue);text-decoration:underline}

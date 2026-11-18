@@ -85,6 +85,35 @@ export async function readReplies(request: Request, settings: { password?: strin
   return response;
 }
 
+async function sentStatuses(resend: Resend, ids: string[]) {
+  if (!ids.length || ids.length > 30 || ids.some(id => !uuid.test(id))) {
+    return json({ error: "Invalid sent message identifiers." }, 400);
+  }
+  const options = { signal: AbortSignal.timeout(10000) };
+  const events: Record<string, string> = {};
+  if (ids.length === 1) {
+    const { data, error } = await resend.emails.get(ids[0], options);
+    if (error?.statusCode === 404) return json({ events });
+    if (error) return sentStatusError(error);
+    if (data.id === ids[0]) events[data.id] = data.last_event;
+  } else {
+    const { data, error } = await resend.emails.list({ limit: 100 }, options);
+    if (error) return sentStatusError(error);
+    for (const message of data.data) {
+      if (ids.includes(message.id)) events[message.id] = message.last_event;
+    }
+  }
+  return json({ events });
+}
+
+function sentStatusError(error: ErrorResponse) {
+  if (error.statusCode === 401 || error.statusCode === 403) {
+    return json({ error: "The Resend key needs Full access to retrieve delivery status." }, 502);
+  }
+  if (error.statusCode === 429) return json({ error: "Resend is busy. Try refreshing in a moment." }, 429);
+  return json({ error: "Could not retrieve delivery status from Resend." }, 502);
+}
+
 async function mailboxResponse(request: Request, settings: { apiKey?: string; mailbox: string }) {
   if (!settings.apiKey || !settings.mailbox) return json({ error: "Configure the Resend API key and receiving address on the server." }, 503);
   const params = new URL(request.url).searchParams;
@@ -97,6 +126,9 @@ async function mailboxResponse(request: Request, settings: { apiKey?: string; ma
   const resend = new Resend(settings.apiKey);
   const options = { signal: AbortSignal.timeout(12000) };
   try {
+    if (params.get("view") === "sent-status") {
+      return await sentStatuses(resend, [...new Set(params.getAll("receipt"))]);
+    }
     if (id) {
       const { data, error } = await resend.emails.receiving.get(id, { html_format: "cid" }, options);
       if (error) return providerError(error);
@@ -119,6 +151,6 @@ async function mailboxResponse(request: Request, settings: { apiKey?: string; ma
     const messages = scoped.map(({ id, from, subject, created_at }) => ({ id, from, subject, date: created_at }));
     return json({ mailbox: settings.mailbox, messages, next } satisfies ReplyPage);
   } catch {
-    return json({ error: "Could not load replies from Resend. Try again." }, 502);
+    return json({ error: "Could not reach Resend. Try again." }, 502);
   }
 }

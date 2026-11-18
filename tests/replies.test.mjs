@@ -103,3 +103,26 @@ test("remembered inbox sessions renew on use and reject expired or invalid crede
   assert.match(logout.headers.get("set-cookie"), /Max-Age=0/);
   assert.equal(inboxSession(new Request(url, { method: "DELETE", headers: { origin: "https://other.example" } }), settings.password).status, 403);
 });
+
+test("sent status is private and returns only requested message IDs and latest events", async t => {
+  const query = "?view=sent-status&receipt=" + id + "&receipt=" + otherId;
+  const transport = t.mock.method(globalThis, "fetch", async url => {
+    assert.equal(new URL(url).pathname, "/emails");
+    return Response.json({ data: [
+      { id, last_event: "complained", subject: "Private subject", to: ["private@example.org"] },
+      { id: "another-message", last_event: "delivered" },
+    ], has_more: false });
+  });
+  assert.equal((await readReplies(request(query, "wrong"), settings)).status, 401);
+  assert.equal((await readReplies(request("?view=sent-status&receipt=bad"), settings)).status, 400);
+  assert.equal(transport.mock.callCount(), 0);
+  assert.deepEqual(await (await readReplies(request(query), settings)).json(), { events: { [id]: "complained" } });
+  transport.mock.mockImplementation(async url => {
+    assert.equal(new URL(url).pathname, "/emails/" + otherId);
+    return Response.json({ id: otherId, last_event: "opened", text: "private" });
+  });
+  const old = "?view=sent-status&receipt=" + otherId;
+  assert.deepEqual(await (await readReplies(request(old), settings)).json(), { events: { [otherId]: "opened" } });
+  transport.mock.mockImplementation(async () => Response.json({ name: "not_found", statusCode: 404, message: "Gone" }, { status: 404 }));
+  assert.deepEqual(await (await readReplies(request(old), settings)).json(), { events: {} });
+});

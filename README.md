@@ -18,6 +18,12 @@ Put your key in `RESEND_API_KEY` in the ignored `.dev.vars` file. Set `RESEND_FR
 
 Deploy the repository root. The checked-in Vercel configuration runs the native Next.js build and serves the composer at `/`. The page loads before Resend credentials are configured. Protect the deployment before enabling email sending, then configure the server variables `RESEND_API_KEY` and `RESEND_FROM` in the Vercel project and redeploy.
 
+## Sent mail status
+
+Sent mail checks Resend’s latest event for each saved receipt when you visit the tab, every minute while visible, and when you select **Refresh**. It uses the existing inbox sign-in. A new receipt initially shows **Accepted**. Resend can later report **Sent**, **Delivered**, **Opened**, **Clicked**, **Reported as spam**, a delay, or a delivery failure. Each label describes the message as a whole. **Delivered** confirms acceptance by the destination mail server. Automatic spam-folder placement is private to the receiving provider.
+
+New sends include an escaped HTML copy alongside the original plain text. To receive open events, enable open tracking in the sending domain’s Resend configuration. **Opened** means the tracking image loaded. Image blockers and privacy proxies can affect this signal. Earlier plain-text-only sends can still show delivery and complaint events. [Resend tracking setup](https://resend.com/docs/dashboard/domains/tracking)
+
 ## Replies
 
 Open `/replies` or select **Replies** in the navigation. Set the following Production variables in Vercel and redeploy.

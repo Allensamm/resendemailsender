@@ -26,6 +26,11 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 const fail = (message: string, status: number) => Response.json({ error: message }, { status });
 const validAddress = /^[^\s@,;<>]+@[^\s@,;<>]+\.[^\s@,;<>]+$/;
 
+function messageHtml(message: string) {
+  const escaped = message.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  return '<div style="white-space:pre-wrap">' + escaped + "</div>";
+}
+
 export async function sendEmail(request: Request, settings: MailSettings) {
   const origin = request.headers.get("origin");
   if (origin && origin !== new URL(request.url).origin) return fail("Request origin is invalid.", 403);
@@ -65,7 +70,7 @@ export async function sendEmail(request: Request, settings: MailSettings) {
   const resend = new Resend(settings.RESEND_API_KEY);
   try {
     const { data: receipt, error } = await resend.emails.send(
-      { from, replyTo, ...recipients, subject: data.subject.trim(), text: data.message },
+      { from, replyTo, ...recipients, subject: data.subject.trim(), text: data.message, html: messageHtml(data.message) },
       { idempotencyKey: token, signal: AbortSignal.timeout(15000) },
     );
     if (error) return fail(error.message, error.statusCode ?? 502);
