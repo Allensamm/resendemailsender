@@ -1,17 +1,22 @@
 "use client";
 
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { ChevronLeft, Inbox, LockKeyhole, Mail, MailOpen, Paperclip, RefreshCw } from "lucide-react";
 import type { ReplyBody, ReplyPage, ReplySummary } from "../../lib/read-replies";
 
-async function load<T>(password: string, query: string, signal: AbortSignal): Promise<T> {
+import { markRead, onInboxChange, sessionChanged } from "./read-state";
+
+class InboxError extends Error {
+  constructor(message: string, readonly status: number) { super(message); }
+}
+
+async function load<T>(query: string, signal: AbortSignal, init?: RequestInit): Promise<T> {
   const response = await fetch("/api/replies" + query, {
-    headers: { Authorization: "Bearer " + encodeURIComponent(password) },
-    cache: "no-store", signal,
+    ...init, cache: "no-store", signal,
   });
   if (!response.ok) {
     const result = await response.json() as { error?: string };
-    throw new Error(result.error || "Could not load the inbox.");
+    throw new InboxError(result.error || "Could not load the inbox.", response.status);
   }
   return await response.json() as T;
 }
@@ -24,16 +29,12 @@ export function ReplyInbox({ passwordConfigured }: { passwordConfigured: boolean
   const [error, setError] = useState("");
   const active = useRef<AbortController | null>(null);
 
-  function lock() {
+  const clearView = useCallback(() => {
     active.current?.abort();
     setPassword(""); setPage(null); setSelected(null); setError(""); setBusy(false);
-  }
-  useEffect(() => {
-    window.addEventListener("pagehide", lock);
-    return () => { window.removeEventListener("pagehide", lock); active.current?.abort(); };
   }, []);
 
-  async function run(operation: (signal: AbortSignal) => Promise<void>) {
+  const run = useCallback(async (operation: (signal: AbortSignal) => Promise<void>, silentAuth = false) => {
     active.current?.abort();
     const request = new AbortController();
     active.current = request;
@@ -41,29 +42,69 @@ export function ReplyInbox({ passwordConfigured }: { passwordConfigured: boolean
     try {
       await operation(request.signal);
     } catch (cause) {
-      if (!request.signal.aborted) setError(cause instanceof Error ? cause.message : "Could not load replies.");
+      if (request.signal.aborted) return;
+      if (cause instanceof InboxError && cause.status === 401) {
+        setPage(null); setSelected(null);
+        if (silentAuth) return;
+      }
+      setError(cause instanceof Error ? cause.message : "Could not load replies.");
     } finally {
       if (!request.signal.aborted) setBusy(false);
     }
-  }
-  function fetchPage(after?: string) {
+  }, []);
+  const fetchPage = useCallback((after?: string, silentAuth = false) => {
     return run(async signal => {
-      const result = await load<ReplyPage>(password, after ? "?after=" + encodeURIComponent(after) : "", signal);
+      const result = await load<ReplyPage>(after ? "?after=" + encodeURIComponent(after) : "", signal);
       if (signal.aborted) return;
       setPage(previous => {
         if (!after || !previous) return result;
         const existing = new Set(previous.messages.map(item => item.id));
         return { ...result, messages: [...previous.messages, ...result.messages.filter(item => !existing.has(item.id))] };
       });
+    }, silentAuth);
+  }, [run]);
+
+  useEffect(() => {
+    if (!passwordConfigured) return;
+    const restore = () => { void fetchPage(undefined, true); };
+    const resume = (event: PageTransitionEvent) => { if (event.persisted) restore(); };
+    const unsubscribe = onInboxChange(change => {
+      if (change === "lock") clearView();
+      if (change === "unlock") restore();
     });
-  }
+    restore();
+    window.addEventListener("pagehide", clearView);
+    window.addEventListener("pageshow", resume);
+    return () => {
+      unsubscribe(); active.current?.abort();
+      window.removeEventListener("pagehide", clearView);
+      window.removeEventListener("pageshow", resume);
+    };
+  }, [passwordConfigured, clearView, fetchPage]);
+
   function open(message: ReplySummary) {
     return run(async signal => {
-      const body = await load<ReplyBody>(password, "?id=" + encodeURIComponent(message.id), signal);
-      if (!signal.aborted) setSelected({ message, body });
+      const body = await load<ReplyBody>("?id=" + encodeURIComponent(message.id), signal);
+      if (!signal.aborted) {
+        setSelected({ message, body });
+        markRead(message.id);
+      }
     });
   }
-  function unlock(event: FormEvent) { event.preventDefault(); void fetchPage(); }
+  function unlock(event: FormEvent) {
+    event.preventDefault();
+    void run(async signal => {
+      await load("", signal, { method: "POST", headers: { Authorization: "Bearer " + encodeURIComponent(password) } });
+      if (!signal.aborted) { setPassword(""); sessionChanged("unlock"); }
+    });
+  }
+
+  function lock() {
+    void run(async signal => {
+      await load("", signal, { method: "DELETE" });
+      if (!signal.aborted) sessionChanged("lock");
+    });
+  }
 
   return <section className="card reply-inbox">
     <header className="card-heading"><span className="tile"><Inbox/></span><h2>Reply inbox</h2>

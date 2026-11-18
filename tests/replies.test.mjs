@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readReplies } from "../lib/read-replies.ts";
+import { inboxSession, readReplies } from "../lib/read-replies.ts";
 import { replyMailbox, sendEmail } from "../lib/send-email.ts";
 
 const settings = { password: "private inbox", apiKey: "mock", mailbox: "replies@team.resend.app" };
@@ -69,4 +69,29 @@ test("outgoing messages take the reply address only from server settings", async
   });
   assert.equal((await sendEmail(outgoing, { ...mailSettings, RESEND_REPLY_TO: settings.mailbox })).status, 200);
   assert.equal(envelope.reply_to, settings.mailbox);
+});
+
+test("authenticated badge sessions return only matching IDs, survive navigation, and expire", async t => {
+  const url = "https://example.org/api/replies";
+  const login = new Request(url, { method: "POST", headers: request().headers });
+  assert.equal(inboxSession(login, "different-password").status, 401);
+  const response = inboxSession(login, settings.password);
+  const cookie = response.headers.get("set-cookie");
+  for (const attribute of ["HttpOnly", "SameSite=Strict", "Secure", "Path=/api/replies"]) assert.ok(cookie.includes(attribute));
+  const token = cookie.split(";")[0];
+  const badge = (cookieValue) => new Request(url + "?view=badge", { headers: { cookie: cookieValue } });
+  const transport = t.mock.method(globalThis, "fetch", async url => {
+    assert.equal(new URL(url).searchParams.get("limit"), "100");
+    return Response.json({ data: [sample, { ...sample, id: otherId, to: ["other@team.resend.app"] }], has_more: false });
+  });
+  assert.deepEqual(await (await readReplies(badge(token), settings)).json(), { ids: [id], next: null });
+  assert.equal((await readReplies(badge(token + "x"), settings)).status, 401);
+  assert.equal((await readReplies(badge(token), { ...settings, password: "rotated" })).status, 401);
+  const future = Date.now() + 8 * 86400000;
+  t.mock.method(Date, "now", () => future);
+  assert.equal((await readReplies(badge(token), settings)).status, 401);
+  assert.equal(transport.mock.callCount(), 1);
+  const logout = inboxSession(new Request(url, { method: "DELETE" }), settings.password);
+  assert.match(logout.headers.get("set-cookie"), /Max-Age=0/);
+  assert.equal(inboxSession(new Request(url, { method: "DELETE", headers: { origin: "https://other.example" } }), settings.password).status, 403);
 });

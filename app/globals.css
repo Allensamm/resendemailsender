@@ -33,3 +33,5 @@ footer{border-top:1px solid #dcdedc;margin:37px 0 20px;padding-top:17px;display:
 .reply-text{margin-top:18px;border-top:1px solid var(--line);padding-top:18px;white-space:pre-wrap;line-height:1.65}
 .reply-files{margin-top:20px}.inbox-more,.inbox-status{padding:12px 24px}
 @media(max-width:560px){.top-inner{height:auto;min-height:88px;align-content:center;justify-content:flex-start;flex-wrap:wrap;gap:5px}.top-inner nav{width:100%;height:auto}.inbox-controls{gap:4px}.inbox-control{padding:6px}.inbox-unlock,.reply-reader{padding:18px}}
+
+.reply-badge{display:inline-grid;place-items:center;min-width:19px;height:19px;padding:0 5px;border-radius:20px;background:var(--blue);color:white;font:600 11px/1 var(--sans);font-variant-numeric:tabular-nums}

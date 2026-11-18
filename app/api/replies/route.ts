@@ -1,6 +1,6 @@
 import { env } from "node:process";
 import { replyMailbox, type MailSettings } from "../../../lib/send-email";
-import { readReplies } from "../../../lib/read-replies";
+import { inboxSession, readReplies } from "../../../lib/read-replies";
 
 export const dynamic = "force-dynamic";
 export function GET(request: Request) {
@@ -9,4 +9,12 @@ export function GET(request: Request) {
     apiKey: env.RESEND_API_KEY,
     mailbox: replyMailbox(env as MailSettings),
   });
+}
+
+export function POST(request: Request) {
+  return inboxSession(request, env.INBOX_PASSWORD);
+}
+
+export function DELETE(request: Request) {
+  return inboxSession(request, env.INBOX_PASSWORD);
 }
