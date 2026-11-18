@@ -7,25 +7,42 @@ import { readReceipts, saveReceipt, type Receipt } from "../receipts";
 
 type Parent = NonNullable<Receipt["parent"]>;
 
+function MessageBubble({ sender, date, text, attachments = [], outgoing = false }: {
+  sender: string; date: string; text: string; attachments?: string[]; outgoing?: boolean;
+}) {
+  const lines = text.split("\n");
+  const quoteStart = lines.findIndex(line => /^\s*(On .+wrote:|>+|[-_]{3,}\s*(Original Message|Forwarded message))/i.test(line));
+  const visible = quoteStart > 0 ? lines.slice(0, quoteStart).join("\n").trim() : text;
+  const quoted = quoteStart > 0 ? lines.slice(quoteStart).join("\n") : "";
+  return <article className={"thread-item" + (outgoing ? " thread-outgoing" : "")}>
+    <strong className="thread-sender">{sender}</strong>
+    {visible && <p className="thread-text">{visible}</p>}
+    {quoted && <details className="thread-quoted"><summary>Earlier quoted text</summary><p className="thread-text">{quoted}</p></details>}
+    {attachments.length > 0 && <div className="thread-attachments">{attachments.map((name, index) =>
+      <div className="thread-attachment" key={index}><Paperclip size={17}/><span>{name}</span></div>)}</div>}
+    <time className="thread-time" dateTime={date} title={new Date(date).toLocaleString()}>{new Date(date).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</time>
+  </article>;
+}
+
 function EarlierMessage({ parent }: { parent: Parent }) {
-  const [body, setBody] = useState<string | null>(null);
+  const [body, setBody] = useState<ReplyBody | null>(null);
   const [error, setError] = useState("");
-  const [open, setOpen] = useState(false);
+  const [attempt, setAttempt] = useState(0);
   useEffect(() => {
-    if (!open || body !== null) return;
     const controller = new AbortController();
     setError("");
     fetch("/api/replies?id=" + encodeURIComponent(parent.id), { cache: "no-store", signal: controller.signal })
       .then(async response => {
-        if (!response.ok) throw Error("Could not load this earlier message. Close and reopen to retry.");
+        if (!response.ok) throw Error("Could not load this message.");
         const result = await response.json() as ReplyBody;
-        if (!controller.signal.aborted) setBody(result.text || "This message has no text body.");
+        if (!controller.signal.aborted) setBody(result);
       }).catch(e => { if (!controller.signal.aborted) setError(e.message); });
     return () => controller.abort();
-  }, [body, open, parent.id]);
-  return <details className="thread-item" onToggle={event => setOpen(event.currentTarget.open)}>
-    <summary>From {parent.from} · {new Date(parent.date).toLocaleString()}</summary>
-    {open && <p className="thread-text">{error || body || "Loading message…"}</p>}</details>;
+  }, [attempt, parent.id]);
+  return <div>
+    <MessageBubble sender={parent.from} date={parent.date} text={error || body?.text || (body ? "" : "Loading message…")} attachments={body?.attachments}/>
+    {error && <button className="inbox-control" onClick={() => setAttempt(value => value + 1)}>Retry</button>}
+  </div>;
 }
 
 export function ReplyConversation({ message, body }: { message: ReplySummary; body: ReplyBody }) {
@@ -78,11 +95,9 @@ export function ReplyConversation({ message, body }: { message: ReplySummary; bo
     } finally { pending.current = false; setBusy(false); }
   }
 
-  const entries = [{ id: message.id, at: message.date, content: <div className="thread-item">
-    <p className="reply-meta">From {message.from} · {new Date(message.date).toLocaleString()}</p>
-    <p className="thread-text">{body.text || "This message has no text body."}</p>
-    {body.attachments.length > 0 && <div className="reply-files"><Paperclip size={15}/>{body.attachments.join(", ")}</div>}
-  </div> }];
+  const entries = [{ id: message.id, at: message.date, content:
+    <MessageBubble sender={message.from} date={message.date} text={body.text} attachments={body.attachments}/>
+  }];
   const included = new Set([message.id]);
   for (const receipt of history.filter(r => body.threadId && r.threadId === body.threadId)) {
     const parent = receipt.parent;
@@ -90,9 +105,9 @@ export function ReplyConversation({ message, body }: { message: ReplySummary; bo
       included.add(parent.id);
       entries.push({ id: parent.id, at: parent.date, content: <EarlierMessage parent={parent}/> });
     }
-    entries.push({ id: receipt.id, at: receipt.at, content: <div className="thread-item thread-outgoing">
-      <p className="reply-meta"><strong>You</strong> to {receipt.to} · {new Date(receipt.at).toLocaleString()}</p>
-      <p className="thread-text">{receipt.message}</p></div> });
+    entries.push({ id: receipt.id, at: receipt.at, content:
+      <MessageBubble sender="You" date={receipt.at} text={receipt.message} outgoing/> });
+
   }
   entries.sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
   return <>
