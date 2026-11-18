@@ -22,7 +22,7 @@ Deploy the repository root. The checked-in Vercel configuration runs the native 
 
 Open `/replies` or select **Replies** in the navigation. Set the following Production variables in Vercel and redeploy.
 
-- **INBOX_PASSWORD** is a new password from your password manager. Save it as a Sensitive variable. Enter it on the Replies page to open the inbox. Unlocking remembers this browser for seven days using an HTTP-only session cookie. Select **Lock** to end the session.
+- **INBOX_PASSWORD** is a new password from your password manager. Save it as a Sensitive variable. Enter it on the Replies page to open the inbox. The app remembers the browser with a persistent HTTP-only cookie and renews it during use. Select **Log out** or clear this site’s browser data to end the saved sign-in. Changing the inbox password invalidates existing sessions.
 - New emails sent from `sovernpartners.com` direct replies to `replies@kronaesaex.resend.app`. The Replies inbox reads that same address. Set **RESEND_REPLY_TO** only to override the receiving address. Other sender domains default to their sender mailbox.
 - The existing **RESEND_API_KEY** must have Full access for the server to read received mail. An in-place permission change uses the same key.
 

@@ -11,7 +11,8 @@ function json(body: unknown, status = 200) {
   return Response.json(body, { status, headers: { "Cache-Control": "private, no-store", Vary: "Authorization, Cookie" } });
 }
 const sessionName = "letterpress_inbox";
-const sessionSeconds = 7 * 24 * 60 * 60;
+const day = 24 * 60 * 60;
+const sessionSeconds = 400 * day;
 
 function equalSecrets(left: string, right: string) {
   const digest = (value: string) => createHash("sha256").update(value).digest();
@@ -26,10 +27,19 @@ function signature(expires: string, password: string) {
   return createHmac("sha256", password).update("letterpress/inbox-session/" + expires).digest("base64url");
 }
 
-function hasSession(request: Request, password: string) {
+function sessionExpiry(request: Request, password: string) {
   const token = request.headers.get("cookie")?.split(/;\s*/).find(cookie => cookie.startsWith(sessionName + "="))?.slice(sessionName.length + 1);
   const match = token?.match(/^(\d{10})\.([A-Za-z0-9_-]{43})$/);
-  return Boolean(match && Number(match[1]) > Date.now() / 1000 && equalSecrets(match[2], signature(match[1], password)));
+  if (!match || !equalSecrets(match[2], signature(match[1], password))) return 0;
+  const expiry = Number(match[1]);
+  return expiry > Date.now() / 1000 ? expiry : 0;
+}
+
+function writeSession(response: Response, request: Request, password?: string) {
+  const expires = String(Math.floor(Date.now() / 1000) + sessionSeconds);
+  const token = password ? expires + "." + signature(expires, password) : "";
+  const secure = new URL(request.url).protocol === "https:" || process.env.NODE_ENV === "production";
+  response.headers.set("Set-Cookie", sessionName + "=" + token + "; Path=/api/replies; HttpOnly; SameSite=Strict; Max-Age=" + (password ? sessionSeconds : 0) + (secure ? "; Secure" : ""));
 }
 
 export function inboxSession(request: Request, password?: string) {
@@ -37,16 +47,12 @@ export function inboxSession(request: Request, password?: string) {
   if (origin && origin !== new URL(request.url).origin) return json({ error: "Invalid request origin." }, 403);
   const unlock = request.method === "POST";
   if (!unlock && request.method !== "DELETE") return json({ error: "Unsupported request." }, 405);
-  let token = "";
   if (unlock) {
     if (!password) return json({ error: "Configure the inbox password first." }, 503);
     if (!passwordMatches(request, password)) return json({ error: "Enter your inbox password." }, 401);
-    const expires = String(Math.floor(Date.now() / 1000) + sessionSeconds);
-    token = expires + "." + signature(expires, password);
   }
   const response = json({ unlocked: unlock });
-  const secure = new URL(request.url).protocol === "https:" || process.env.NODE_ENV === "production";
-  response.headers.set("Set-Cookie", sessionName + "=" + token + "; Path=/api/replies; HttpOnly; SameSite=Strict; Max-Age=" + (unlock ? sessionSeconds : 0) + (secure ? "; Secure" : ""));
+  writeSession(response, request, unlock ? password : undefined);
   return response;
 }
 
@@ -69,9 +75,17 @@ function belongsToMailbox(message: ListReceivingEmail, mailbox: string) {
 
 export async function readReplies(request: Request, settings: { password?: string; apiKey?: string; mailbox: string }) {
   if (!settings.password) return json({ error: "Set INBOX_PASSWORD in the server environment and redeploy to unlock Replies." }, 503);
-  if (!hasSession(request, settings.password) && !passwordMatches(request, settings.password)) {
+  const expires = sessionExpiry(request, settings.password);
+  if (!expires && !passwordMatches(request, settings.password)) {
     return json({ error: "Enter your inbox password." }, 401);
   }
+  const response = await mailboxResponse(request, settings);
+  // Also upgrades valid cookies from the original seven-day login.
+  if (expires && expires - Date.now() / 1000 < sessionSeconds - day) writeSession(response, request, settings.password);
+  return response;
+}
+
+async function mailboxResponse(request: Request, settings: { apiKey?: string; mailbox: string }) {
   if (!settings.apiKey || !settings.mailbox) return json({ error: "Configure the Resend API key and receiving address on the server." }, 503);
   const params = new URL(request.url).searchParams;
   const badge = params.get("view") === "badge";

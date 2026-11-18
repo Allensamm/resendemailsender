@@ -71,7 +71,7 @@ test("outgoing messages take the reply address only from server settings", async
   assert.equal(envelope.reply_to, settings.mailbox);
 });
 
-test("authenticated badge sessions return only matching IDs, survive navigation, and expire", async t => {
+test("remembered inbox sessions renew on use and reject expired or invalid credentials", async t => {
   const url = "https://example.org/api/replies";
   const login = new Request(url, { method: "POST", headers: request().headers });
   assert.equal(inboxSession(login, "different-password").status, 401);
@@ -87,10 +87,18 @@ test("authenticated badge sessions return only matching IDs, survive navigation,
   assert.deepEqual(await (await readReplies(badge(token), settings)).json(), { ids: [id], next: null });
   assert.equal((await readReplies(badge(token + "x"), settings)).status, 401);
   assert.equal((await readReplies(badge(token), { ...settings, password: "rotated" })).status, 401);
-  const future = Date.now() + 8 * 86400000;
-  t.mock.method(Date, "now", () => future);
+  const start = Date.now();
+  let now = start + 8 * 86400000;
+  t.mock.method(Date, "now", () => now);
+  const resumed = await readReplies(badge(token), settings);
+  assert.equal(resumed.status, 200);
+  const renewed = resumed.headers.get("set-cookie").split(";")[0];
+  assert.notEqual(token, renewed);
+  now = start + 401 * 86400000;
   assert.equal((await readReplies(badge(token), settings)).status, 401);
-  assert.equal(transport.mock.callCount(), 1);
+  assert.equal((await readReplies(badge(renewed), settings)).status, 200);
+  assert.equal((await readReplies(badge(""), settings)).status, 401);
+  assert.equal(transport.mock.callCount(), 3);
   const logout = inboxSession(new Request(url, { method: "DELETE" }), settings.password);
   assert.match(logout.headers.get("set-cookie"), /Max-Age=0/);
   assert.equal(inboxSession(new Request(url, { method: "DELETE", headers: { origin: "https://other.example" } }), settings.password).status, 403);

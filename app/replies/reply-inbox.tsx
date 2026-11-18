@@ -12,7 +12,7 @@ class InboxError extends Error {
 
 async function load<T>(query: string, signal: AbortSignal, init?: RequestInit): Promise<T> {
   const response = await fetch("/api/replies" + query, {
-    ...init, cache: "no-store", signal,
+    ...init, credentials: "same-origin", cache: "no-store", signal,
   });
   if (!response.ok) {
     const result = await response.json() as { error?: string };
@@ -22,6 +22,7 @@ async function load<T>(query: string, signal: AbortSignal, init?: RequestInit): 
 }
 
 export function ReplyInbox({ passwordConfigured }: { passwordConfigured: boolean }) {
+  const [requiresPassword, setRequiresPassword] = useState(false);
   const [password, setPassword] = useState("");
   const [page, setPage] = useState<ReplyPage | null>(null);
   const [selected, setSelected] = useState<{ message: ReplySummary; body: ReplyBody } | null>(null);
@@ -29,7 +30,8 @@ export function ReplyInbox({ passwordConfigured }: { passwordConfigured: boolean
   const [error, setError] = useState("");
   const active = useRef<AbortController | null>(null);
 
-  const clearView = useCallback(() => {
+  const clearView = useCallback((locked: boolean) => {
+    setRequiresPassword(locked);
     active.current?.abort();
     setPassword(""); setPage(null); setSelected(null); setError(""); setBusy(false);
   }, []);
@@ -44,7 +46,7 @@ export function ReplyInbox({ passwordConfigured }: { passwordConfigured: boolean
     } catch (cause) {
       if (request.signal.aborted) return;
       if (cause instanceof InboxError && cause.status === 401) {
-        setPage(null); setSelected(null);
+        setRequiresPassword(true); setPage(null); setSelected(null);
         if (silentAuth) return;
       }
       setError(cause instanceof Error ? cause.message : "Could not load replies.");
@@ -56,6 +58,7 @@ export function ReplyInbox({ passwordConfigured }: { passwordConfigured: boolean
     return run(async signal => {
       const result = await load<ReplyPage>(after ? "?after=" + encodeURIComponent(after) : "", signal);
       if (signal.aborted) return;
+      setRequiresPassword(false);
       setPage(previous => {
         if (!after || !previous) return result;
         const existing = new Set(previous.messages.map(item => item.id));
@@ -66,18 +69,19 @@ export function ReplyInbox({ passwordConfigured }: { passwordConfigured: boolean
 
   useEffect(() => {
     if (!passwordConfigured) return;
-    const restore = () => { void fetchPage(undefined, true); };
+    const restore = () => { setRequiresPassword(false); void fetchPage(undefined, true); };
+    const hide = () => clearView(false);
     const resume = (event: PageTransitionEvent) => { if (event.persisted) restore(); };
     const unsubscribe = onInboxChange(change => {
-      if (change === "lock") clearView();
+      if (change === "lock") clearView(true);
       if (change === "unlock") restore();
     });
     restore();
-    window.addEventListener("pagehide", clearView);
+    window.addEventListener("pagehide", hide);
     window.addEventListener("pageshow", resume);
     return () => {
       unsubscribe(); active.current?.abort();
-      window.removeEventListener("pagehide", clearView);
+      window.removeEventListener("pagehide", hide);
       window.removeEventListener("pageshow", resume);
     };
   }, [passwordConfigured, clearView, fetchPage]);
@@ -108,16 +112,17 @@ export function ReplyInbox({ passwordConfigured }: { passwordConfigured: boolean
 
   return <section className="card reply-inbox">
     <header className="card-heading"><span className="tile"><Inbox/></span><h2>Reply inbox</h2>
-      {page && <div className="inbox-controls">
-        {!selected && <button type="button" className="inbox-control" disabled={busy} onClick={() => void fetchPage()}><RefreshCw size={15}/>Refresh</button>}
-        <button type="button" className="inbox-control" onClick={lock}><LockKeyhole size={15}/>Lock</button>
+      {passwordConfigured && !requiresPassword && (page || error) && <div className="inbox-controls">
+        {!selected && <button type="button" className="inbox-control" disabled={busy} onClick={() => void fetchPage(undefined, true)}><RefreshCw size={15}/>Refresh</button>}
+        <button type="button" className="inbox-control" onClick={lock}><LockKeyhole size={15}/>Log out</button>
       </div>}
     </header>
     {!passwordConfigured ? <div className="inbox-unlock"><LockKeyhole size={26}/><h3>Set your inbox password</h3>
       <p>Save a password as <code>INBOX_PASSWORD</code> in the Vercel Production environment, then redeploy to open this inbox.</p></div> :
-     !page ? <form onSubmit={unlock} className="inbox-unlock"><LockKeyhole size={26}/><h3>Open your private inbox</h3>
+     requiresPassword ? <form onSubmit={unlock} className="inbox-unlock"><LockKeyhole size={26}/><h3>Open your private inbox</h3>
       <div className="field"><label htmlFor="inbox-password">Inbox password</label><input id="inbox-password" type="password" required autoComplete="current-password" value={password} onChange={e => setPassword(e.target.value)}/></div>
       <button className="primary" type="submit" disabled={busy}>{busy ? "Opening…" : "Open inbox"}</button></form> :
+     !page ? (!error && <p className="inbox-status" role="status">Opening your inbox…</p>) :
      selected ? <article className="reply-reader">
       <button type="button" className="inbox-control" onClick={() => { setSelected(null); setError(""); }}><ChevronLeft size={15}/>All replies</button>
       <h3>{selected.message.subject || "(No subject)"}</h3>
