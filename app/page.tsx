@@ -50,19 +50,19 @@ export default function Home() {
     if (isDraft(saved?.draft)) {
       setDraft(saved.draft); setCc(Boolean(saved.draft.cc)); setBcc(Boolean(saved.draft.bcc));
     }
-    setToken(typeof saved?.token === "string" && saved.token ? saved.token : crypto.randomUUID());
+    setToken(typeof saved?.token === "string" && saved.token ? saved.token : "send-email/" + crypto.randomUUID());
     const receipts = readLocal(historyKey);
     if (Array.isArray(receipts)) setHistory(receipts.filter(isReceipt));
     setReady(true);
-    fetch("/api/sender").then(r => r.json()).then(s => setFrom((s as { from: string }).from)).catch(() => setFrom("Sender unavailable"));
+    fetch("/api/sender").then(r => r.json()).then(s => setFrom((s as { from: string }).from || "Configure sender address")).catch(() => setFrom("Sender unavailable"));
   }, []);
   useEffect(() => { if (ready) persist(draftKey, { draft, token }); }, [draft, token, ready]);
 
   function change(key: keyof Draft, value: string) {
-    setDraft(previous => ({ ...previous, [key]: value })); setToken(crypto.randomUUID()); setNotice(null); setDiscard(false);
+    setDraft(previous => ({ ...previous, [key]: value })); setToken("send-email/" + crypto.randomUUID()); setNotice(null); setDiscard(false);
   }
   function reset() {
-    setDraft({ ...empty }); setToken(crypto.randomUUID()); setCc(false); setBcc(false); setDiscard(false);
+    setDraft({ ...empty }); setToken("send-email/" + crypto.randomUUID()); setCc(false); setBcc(false); setDiscard(false);
   }
   async function submit(event: FormEvent) {
     event.preventDefault();

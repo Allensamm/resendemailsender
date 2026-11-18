@@ -1,7 +1,14 @@
+import { Resend } from "resend";
+
 export type MailSettings = { RESEND_API_KEY?: string; RESEND_FROM?: string };
 
-export const senderAddress = (settings: MailSettings) =>
-  settings.RESEND_FROM?.trim() || "onboarding@resend.dev";
+export function senderAddress(settings: MailSettings, production = process.env.NODE_ENV === "production") {
+  const sender = settings.RESEND_FROM?.trim() || (production ? "" : "onboarding@resend.dev");
+  const mailbox = sender.match(/<([^<>]+)>$/)?.[1] || sender;
+  if (!validAddress.test(mailbox) || /[\r\n]/.test(sender)) return "";
+  if (production && mailbox.toLowerCase().endsWith("@resend.dev")) return "";
+  return sender;
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -10,7 +17,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 const fail = (message: string, status: number) => Response.json({ error: message }, { status });
 const validAddress = /^[^\s@,;<>]+@[^\s@,;<>]+\.[^\s@,;<>]+$/;
 
-export async function sendEmail(request: Request, settings: MailSettings, send = fetch) {
+export async function sendEmail(request: Request, settings: MailSettings) {
   const origin = request.headers.get("origin");
   if (origin && origin !== new URL(request.url).origin) return fail("Request origin is invalid.", 403);
   if (request.headers.get("content-type")?.split(";")[0] !== "application/json")
@@ -22,9 +29,9 @@ export async function sendEmail(request: Request, settings: MailSettings, send =
     return fail("The message could not be read.", 400);
   }
   if (!isRecord(data)) return fail("Enter a recipient, subject, and message.", 400);
-  const recipients: Record<string, string[]> = {};
+  const recipients: { to: string[]; cc?: string[]; bcc?: string[] } = { to: [] };
   let count = 0;
-  for (const field of ["to", "cc", "bcc"]) {
+  for (const field of ["to", "cc", "bcc"] as const) {
     const raw = data[field] ?? "";
     if (typeof raw !== "string" || raw.length > 16000) return fail("Check the recipient addresses.", 400);
     const list = raw.trim() ? raw.split(",").map(item => item.trim()) : [];
@@ -40,20 +47,19 @@ export async function sendEmail(request: Request, settings: MailSettings, send =
   if (typeof data.message !== "string" || !data.message.trim() || data.message.length > 50000)
     return fail("Enter a message of up to 50,000 characters.", 400);
   const token = request.headers.get("idempotency-key");
-  if (!token || !/^[\w-]{1,128}$/.test(token)) return fail("A send request identifier is required.", 400);
+  if (!token || !/^[\w/-]{1,256}$/.test(token)) return fail("A send request identifier is required.", 400);
   if (!settings.RESEND_API_KEY) return fail("Add RESEND_API_KEY to the server environment to enable sending. Your draft is still here.", 503);
+  const from = senderAddress(settings);
+  if (!from) return fail("Set RESEND_FROM to an address on your verified Resend domain.", 503);
+  const resend = new Resend(settings.RESEND_API_KEY);
   try {
-    const response = await send("https://api.resend.com/emails", {
-      method: "POST",
-      headers: { Authorization: "Bearer " + settings.RESEND_API_KEY, "Content-Type": "application/json", "Idempotency-Key": token },
-      body: JSON.stringify({ from: senderAddress(settings), ...recipients, subject: data.subject.trim(), text: data.message }),
-      signal: AbortSignal.timeout(15000),
-    });
-    const body = await response.json();
-    const result = isRecord(body) ? body : {};
-    if (!response.ok) return fail(typeof result?.message === "string" ? result.message : "Resend could not accept this message.", response.status);
-    if (typeof result?.id !== "string" || !result.id) return fail("Resend did not return a message ID. Retry to confirm this send.", 502);
-    return Response.json({ id: result.id });
+    const { data: receipt, error } = await resend.emails.send(
+      { from, ...recipients, subject: data.subject.trim(), text: data.message },
+      { idempotencyKey: token, signal: AbortSignal.timeout(15000) },
+    );
+    if (error) return fail(error.message, error.statusCode ?? 502);
+    if (!receipt?.id) return fail("Resend did not return a message ID. Retry to confirm this send.", 502);
+    return Response.json({ id: receipt.id });
   } catch {
     return fail("Could not confirm the send with Resend. Retry this draft to check the same request.", 502);
   }
