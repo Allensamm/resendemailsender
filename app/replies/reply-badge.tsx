@@ -6,7 +6,7 @@ import { isDeleted, onInboxChange, wasRead } from "./read-state";
 type BadgePage = { ids: string[]; next: string | null };
 
 export function ReplyBadge() {
-  const [count, setCount] = useState(0);
+  const [count, setCount] = useState<number | null>(null);
 
   useEffect(() => {
     let request: AbortController | null = null;
@@ -20,7 +20,7 @@ export function ReplyBadge() {
     };
     function clear() {
       request?.abort(); request = null;
-      known.clear(); more = false; setCount(0);
+      known.clear(); more = false; setCount(null);
     }
     async function refresh() {
       if (document.hidden || request || locked) return;
@@ -57,12 +57,12 @@ export function ReplyBadge() {
       if (change === "unlock") { clear(); locked = false; void refresh(); }
       if (change === "read" || change === "deleted") {
         const value = unread(known);
-        setCount(value);
+        setCount(previous => previous === null ? null : value);
         if (more && value < 100) void refresh();
       }
     });
     void refresh();
-    const timer = window.setInterval(refresh, 30000);
+    const timer = window.setInterval(refresh, 15000);
     window.addEventListener("focus", resume);
     window.addEventListener("pageshow", resume);
     window.addEventListener("pagehide", suspend);
@@ -76,7 +76,7 @@ export function ReplyBadge() {
     };
   }, []);
 
-  if (!count) return null;
+  if (count === null) return null;
   const display = count > 99 ? "99+" : String(count);
-  return <span className="reply-badge" aria-label={display + " unread replies"}>{display}</span>;
+  return <span className="reply-badge" role="status" aria-live="polite" aria-atomic="true" title="Unread replies · checks every 15 seconds while this page is open" aria-label={display + " unread replies"}>{display}</span>;
 }
