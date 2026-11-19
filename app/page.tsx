@@ -4,6 +4,8 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { ArrowUpRight, CalendarClock, Eye, FilePenLine,  Plane, Send, ShieldCheck, Stamp, X } from "lucide-react";
 
 import { isDraft, readReceipts, saveReceipt, type Draft, type Receipt } from "./receipts";
+import { SignaturePreview } from "./email-signature";
+import type { EmailSignature } from "../lib/signature";
 import { SentMail } from "./sent-mail";
 import { WorkspaceHeader } from "./workspace-header";
 
@@ -45,6 +47,7 @@ export default function Home() {
   const [token, setToken] = useState("");
   const [ready, setReady] = useState(false);
   const [zone, setZone] = useState("");
+  const [signature, setSignature] = useState<EmailSignature | null>(null);
   const [from, setFrom] = useState("");
   const [history, setHistory] = useState<Receipt[]>([]);
   const [cc, setCc] = useState(false);
@@ -65,7 +68,7 @@ export default function Home() {
     setHistory(readReceipts());
     setZone(Intl.DateTimeFormat().resolvedOptions().timeZone);
     setReady(true);
-    fetch("/api/sender").then(r => r.json()).then(s => setFrom((s as { from: string }).from || "Configure sender address")).catch(() => setFrom("Sender unavailable"));
+    fetch("/api/sender").then(r => r.json()).then(s => { setFrom((s as { from: string }).from || "Configure sender address"); setSignature((s as { signature?: EmailSignature }).signature || null); }).catch(() => setFrom("Sender unavailable"));
     return () => window.removeEventListener("hashchange", selectView);
   }, []);
   useEffect(() => { if (ready) persist(draftKey, { draft, token }); }, [draft, token, ready]);
@@ -82,9 +85,9 @@ export default function Home() {
     sending.current = true; setBusy(true); setNotice(null);
     try {
       const result = await fetch("/api/send-email", { method: "POST", headers: { "Content-Type": "application/json", "Idempotency-Key": token }, body: JSON.stringify(draft) });
-      const data = await result.json() as { id?: string; scheduledAt?: string; error?: string };
+      const data = await result.json() as { id?: string; scheduledAt?: string; signature?: EmailSignature; error?: string };
       if (!result.ok || !data.id) throw new Error(data.error || "The server could not confirm this send.");
-      const receipt = { ...draft, ...(data.scheduledAt && { scheduledAt: data.scheduledAt }), id: data.id, at: new Date().toISOString(), from };
+      const receipt = { ...draft, ...(data.signature && { signature: data.signature }), ...(data.scheduledAt && { scheduledAt: data.scheduledAt }), id: data.id, at: new Date().toISOString(), from };
       setHistory(saveReceipt(receipt, history)); reset();
       setNotice({ ok: true, text: data.scheduledAt ? "Scheduled for " + displayTime(data.scheduledAt) + " (" + zone + "). You can close the browser. Manage it in Sent mail." : "Resend accepted your email. Its message ID is in Sent mail." });
     } catch (error) {
@@ -110,6 +113,7 @@ export default function Home() {
               <div className="field"><label htmlFor="subject">Subject</label><input id="subject" required maxLength={500} value={draft.subject} onChange={e => change("subject", e.target.value)} placeholder="Add a subject line"/></div>
               <div className="field"><label htmlFor="message">Message</label><div className="text-wrap"><textarea id="message" required maxLength={50000} value={draft.message} onChange={e => change("message", e.target.value)} placeholder="Write your message here…"/><div className="text-meta"><span>Plain text</span><span>{draft.message.length.toLocaleString()} characters</span></div></div></div>
             </div>
+            {signature && <p className="signature-note">Your Sovern Partners signature is added automatically.</p>}
             <div className="schedule-panel">
               <label className="schedule-toggle"><input type="checkbox" checked={draft.scheduledAt !== undefined} onChange={e => {
                 if (e.target.checked) change("scheduledAt", new Date(Date.now() + 3600000).toISOString());
@@ -134,7 +138,7 @@ export default function Home() {
           <div className="preview-content"><div className="preview-address"><span>FROM</span><strong>{from || "Loading sender…"}</strong><span>TO</span><strong className={draft.to ? "" : "muted"}>{draft.to || "Recipient address"}</strong>
           {draft.cc && <><span>CC</span><strong>{draft.cc}</strong></>}{draft.bcc && <><span>BCC</span><strong>{draft.bcc}</strong></>}</div>
             {draft.scheduledAt && <p className="schedule-preview"><CalendarClock size={16}/>Scheduled for {displayTime(draft.scheduledAt)} ({zone})</p>}
-            <div className="preview-body"><h3>{draft.subject || "Your subject line"}</h3><p className={draft.message ? "" : "muted"}>{draft.message || "Your message will appear here as you type."}</p></div></div>
+            <div className="preview-body"><h3>{draft.subject || "Your subject line"}</h3><p className={draft.message ? "" : "muted"}>{draft.message || "Your message will appear here as you type."}</p><SignaturePreview signature={signature}/></div></div>
         </section><div className="privacy"><ShieldCheck size={15}/><span>Sent securely through Resend</span></div></aside>
       </div> : <SentMail history={history} onHistory={setHistory} onCompose={() => { location.hash = ""; setView("compose"); }}/>}
       <footer><span><Stamp size={15}/>Letterpress</span><span>Powered by <a href="https://resend.com" target="_blank" rel="noreferrer">Resend <ArrowUpRight size={12}/></a></span></footer>

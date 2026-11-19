@@ -69,3 +69,9 @@ footer{border-top:1px solid #dcdedc;margin:37px 0 20px;padding-top:17px;display:
 .schedule-help, .schedule-preview { font-size: 14px; line-height: 1.5; color: #53627a; }
 .schedule-preview { display: flex; gap: 8px; align-items: center; padding: 12px 0; }
 .schedule-cancel { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-top: 12px; }
+
+.signature-note { margin: 0 28px 18px; font-size: 14px; color: #586579; line-height: 1.5; }
+.thread-compose .signature-note { margin: 12px 0; }
+.email-signature { overflow-wrap: anywhere; }
+.details .email-signature { margin-bottom: 20px; }
+.email-signature a:hover { text-decoration: underline !important; }

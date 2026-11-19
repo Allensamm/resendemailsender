@@ -65,3 +65,28 @@ test("invalid, past, ambiguous and out-of-range schedules never send immediately
   }
   assert.equal(transport.mock.callCount(), 0);
 });
+
+test("Samantha's signature is appended once to new, scheduled and threaded mail in HTML and plain text", async t => {
+  const envelopes = [];
+  t.mock.method(globalThis, "fetch", async (url, options) => {
+    envelopes.push(JSON.parse(options.body));
+    return Response.json({ id: "signed-receipt" });
+  });
+  const signatureSettings = { ...settings, RESEND_FROM: "samantha@sovernpartners.com", RESEND_REPLY_TO: "samantha@sovernpartners.com" };
+  const thread = { to: ["delivered@resend.dev"], subject: "Re: Hello", threadId: "<root@example.org>", headers: { "In-Reply-To": "<parent@example.org>", References: "<root@example.org> <parent@example.org>" } };
+  for (const [payload, target] of [[draft, undefined], [{ ...draft, scheduledAt: new Date(Date.now() + 86400000).toISOString() }, undefined], [draft, thread]]) {
+    const result = await (await sendEmail(request(payload), signatureSettings, target)).json();
+    assert.equal(result.signature.name, "Samanthan");
+    assert.equal(result.signature.website, "https://sovernpartners.com");
+  }
+  for (const envelope of envelopes) {
+    assert.equal(envelope.text.split("Samanthan").length - 1, 1);
+    assert.equal(envelope.html.split("Samanthan").length - 1, 1);
+    assert.ok(envelope.text.startsWith(draft.message + "\n\n"));
+    assert.match(envelope.html, /One &lt;two&gt; &amp; three/);
+    assert.match(envelope.html, /href="mailto:samantha@sovernpartners.com"/);
+    assert.match(envelope.html, /href="https:\/\/sovernpartners.com"/);
+    assert.doesNotMatch(envelope.html, /<img/);
+  }
+  assert.deepEqual(envelopes[2].headers, thread.headers);
+});

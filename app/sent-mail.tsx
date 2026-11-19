@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Check, Inbox, Mail, MailOpen, PenLine, RefreshCw } from "lucide-react";
+import { SignaturePreview } from "./email-signature";
 import { isDeleted, onInboxChange } from "./replies/read-state";
 
 import { saveReceipt, type Receipt } from "./receipts";
@@ -118,7 +119,7 @@ export function SentMail({ history, onCompose, onHistory }: { history: Receipt[]
             <Mail size={18}/><span className="sent-summary"><b>{r.subject}</b><small>{r.to}</small>{r.scheduledAt && <small>Send time: {new Date(r.scheduledAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })} ({Intl.DateTimeFormat().resolvedOptions().timeZone})</small>}</span>
             <span className={"delivery-label " + color} title={description}>{label}</span><time>{new Date(r.at).toLocaleDateString()}</time>
           </button>
-          {shown === r.id && <div className="details"><small>From {r.from}</small>{r.cc && <small>Cc {r.cc}</small>}{r.bcc && <small>Bcc {r.bcc}</small>}<p>{r.message}</p><small>{description}</small><small><Check size={14}/> Accepted · {r.id}</small>
+          {shown === r.id && <div className="details"><small>From {r.from}</small>{r.cc && <small>Cc {r.cc}</small>}{r.bcc && <small>Bcc {r.bcc}</small>}<p>{r.message}</p><SignaturePreview signature={r.signature}/><small>{description}</small><small><Check size={14}/> Accepted · {r.id}</small>
             {r.scheduledAt && event === "scheduled" && <CancelSchedule id={r.id} locked={locked} disabled={busy} onCanceled={() => {
               onHistory(saveReceipt({ ...r, canceled: true }, history)); setEvents(previous => ({ ...previous, [r.id]: "canceled" }));
             }}/>}</div>}
