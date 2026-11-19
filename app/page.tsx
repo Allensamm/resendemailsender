@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { ArrowUpRight, Eye, FilePenLine,  Plane, Send, ShieldCheck, Stamp, X } from "lucide-react";
+import { ArrowUpRight, CalendarClock, Eye, FilePenLine,  Plane, Send, ShieldCheck, Stamp, X } from "lucide-react";
 
 import { isDraft, readReceipts, saveReceipt, type Draft, type Receipt } from "./receipts";
 import { SentMail } from "./sent-mail";
@@ -14,6 +14,15 @@ function readLocal(key: string) {
 }
 function persist(key: string, value: unknown) {
   try { localStorage.setItem(key, JSON.stringify(value)); return true; } catch { return false; }
+}
+
+function localDateTime(iso: string) {
+  const date = new Date(iso);
+  if (!Number.isFinite(date.getTime())) return "";
+  return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+}
+function displayTime(iso: string) {
+  return new Date(iso).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
 }
 
 function Envelope({ to }: { to: string }) {
@@ -35,6 +44,7 @@ export default function Home() {
   const [draft, setDraft] = useState<Draft>({ ...empty });
   const [token, setToken] = useState("");
   const [ready, setReady] = useState(false);
+  const [zone, setZone] = useState("");
   const [from, setFrom] = useState("");
   const [history, setHistory] = useState<Receipt[]>([]);
   const [cc, setCc] = useState(false);
@@ -53,6 +63,7 @@ export default function Home() {
     }
     setToken(typeof saved?.token === "string" && saved.token ? saved.token : "send-email/" + crypto.randomUUID());
     setHistory(readReceipts());
+    setZone(Intl.DateTimeFormat().resolvedOptions().timeZone);
     setReady(true);
     fetch("/api/sender").then(r => r.json()).then(s => setFrom((s as { from: string }).from || "Configure sender address")).catch(() => setFrom("Sender unavailable"));
     return () => window.removeEventListener("hashchange", selectView);
@@ -71,11 +82,11 @@ export default function Home() {
     sending.current = true; setBusy(true); setNotice(null);
     try {
       const result = await fetch("/api/send-email", { method: "POST", headers: { "Content-Type": "application/json", "Idempotency-Key": token }, body: JSON.stringify(draft) });
-      const data = await result.json() as { id?: string; error?: string };
+      const data = await result.json() as { id?: string; scheduledAt?: string; error?: string };
       if (!result.ok || !data.id) throw new Error(data.error || "The server could not confirm this send.");
-      const receipt = { ...draft, id: data.id, at: new Date().toISOString(), from };
+      const receipt = { ...draft, ...(data.scheduledAt && { scheduledAt: data.scheduledAt }), id: data.id, at: new Date().toISOString(), from };
       setHistory(saveReceipt(receipt, history)); reset();
-      setNotice({ ok: true, text: "Resend accepted your email. Its message ID is in Sent mail." });
+      setNotice({ ok: true, text: data.scheduledAt ? "Scheduled for " + displayTime(data.scheduledAt) + " (" + zone + "). You can close the browser. Manage it in Sent mail." : "Resend accepted your email. Its message ID is in Sent mail." });
     } catch (error) {
       setNotice({ ok: false, text: error instanceof TypeError ? "Connection interrupted. Retry this draft to confirm the send." : error instanceof Error ? error.message : "Send failed. Please try again." });
     } finally { sending.current = false; setBusy(false); }
@@ -99,8 +110,21 @@ export default function Home() {
               <div className="field"><label htmlFor="subject">Subject</label><input id="subject" required maxLength={500} value={draft.subject} onChange={e => change("subject", e.target.value)} placeholder="Add a subject line"/></div>
               <div className="field"><label htmlFor="message">Message</label><div className="text-wrap"><textarea id="message" required maxLength={50000} value={draft.message} onChange={e => change("message", e.target.value)} placeholder="Write your message here…"/><div className="text-meta"><span>Plain text</span><span>{draft.message.length.toLocaleString()} characters</span></div></div></div>
             </div>
+            <div className="schedule-panel">
+              <label className="schedule-toggle"><input type="checkbox" checked={draft.scheduledAt !== undefined} onChange={e => {
+                if (e.target.checked) change("scheduledAt", new Date(Date.now() + 3600000).toISOString());
+                else { setDraft(previous => { const next = { ...previous }; delete next.scheduledAt; return next; }); setToken("send-email/" + crypto.randomUUID()); setNotice(null); }
+              }}/><CalendarClock size={18}/>Send later</label>
+              {draft.scheduledAt !== undefined && <div className="field">
+                <label htmlFor="send-time">Send date and time</label>
+                <input id="send-time" type="datetime-local" required value={localDateTime(draft.scheduledAt)}
+                  min={localDateTime(new Date(Date.now() + 120000).toISOString())} max={localDateTime(new Date(Date.now() + 30 * 86400000).toISOString())}
+                  onChange={e => { const date = new Date(e.target.value); change("scheduledAt", Number.isFinite(date.getTime()) ? date.toISOString() : ""); }}/>
+                <p className="schedule-help">Timezone: <strong>{zone}</strong>. Schedule up to 30 days ahead. Your browser can be closed.</p>
+              </div>}
+            </div>
             {notice && <div className={"notice " + (notice.ok ? "success" : "")} role={notice.ok ? "status" : "alert"}>{notice.text}</div>}
-            <div className="actions"><button type="submit" className="primary"><Send size={16}/>{busy ? "Sending…" : "Send email"}</button>
+            <div className="actions"><button type="submit" className="primary"><Send size={16}/>{busy ? (draft.scheduledAt !== undefined ? "Scheduling…" : "Sending…") : draft.scheduledAt !== undefined ? "Schedule email" : "Send email"}</button>
               {discard ? <div className="discard"><span>Clear draft?</span><button type="button" onClick={() => { reset(); setNotice(null); }}>Clear</button><button type="button" onClick={() => setDiscard(false)}>Keep</button></div> : <button className="clear" type="button" disabled={!Object.values(draft).some(Boolean)} onClick={() => setDiscard(true)}>Clear draft</button>}
             </div>
           </fieldset></form>
@@ -109,9 +133,10 @@ export default function Home() {
           <Envelope to={draft.to}/>
           <div className="preview-content"><div className="preview-address"><span>FROM</span><strong>{from || "Loading sender…"}</strong><span>TO</span><strong className={draft.to ? "" : "muted"}>{draft.to || "Recipient address"}</strong>
           {draft.cc && <><span>CC</span><strong>{draft.cc}</strong></>}{draft.bcc && <><span>BCC</span><strong>{draft.bcc}</strong></>}</div>
+            {draft.scheduledAt && <p className="schedule-preview"><CalendarClock size={16}/>Scheduled for {displayTime(draft.scheduledAt)} ({zone})</p>}
             <div className="preview-body"><h3>{draft.subject || "Your subject line"}</h3><p className={draft.message ? "" : "muted"}>{draft.message || "Your message will appear here as you type."}</p></div></div>
         </section><div className="privacy"><ShieldCheck size={15}/><span>Sent securely through Resend</span></div></aside>
-      </div> : <SentMail history={history} onCompose={() => { location.hash = ""; setView("compose"); }}/>}
+      </div> : <SentMail history={history} onHistory={setHistory} onCompose={() => { location.hash = ""; setView("compose"); }}/>}
       <footer><span><Stamp size={15}/>Letterpress</span><span>Powered by <a href="https://resend.com" target="_blank" rel="noreferrer">Resend <ArrowUpRight size={12}/></a></span></footer>
     </main>
   </>;

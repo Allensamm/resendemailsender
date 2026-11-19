@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Check, Inbox, Mail, MailOpen, PenLine, RefreshCw } from "lucide-react";
 import { isDeleted, onInboxChange } from "./replies/read-state";
 
-import type { Receipt } from "./receipts";
+import { saveReceipt, type Receipt } from "./receipts";
 
 const labels: Record<string, [string, string, string]> = {
   accepted: ["Accepted", "neutral", "Resend accepted this message for sending."],
@@ -38,7 +38,7 @@ async function getEvents(ids: string[], signal: AbortSignal) {
   return (await response.json() as Result).events;
 }
 
-export function SentMail({ history, onCompose }: { history: Receipt[]; onCompose: () => void }) {
+export function SentMail({ history, onCompose, onHistory }: { history: Receipt[]; onCompose: () => void; onHistory: (history: Receipt[]) => void }) {
   const [shown, setShown] = useState<string | null>(null);
   const [events, setEvents] = useState<Record<string, string>>({});
   const [notice, setNotice] = useState("");
@@ -49,7 +49,7 @@ export function SentMail({ history, onCompose }: { history: Receipt[]; onCompose
   useEffect(() => {
     if (!history.length) return;
     let active: AbortController | null = null;
-    const ids = [...new Set(history.map(r => r.id).filter(id => /^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i.test(id)))].slice(0, 30);
+    const ids = [...new Set(history.map(r => r.id).filter(id => /^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i.test(id)))];
     if (!ids.length) return;
     let authenticated = true;
     function forget() {
@@ -61,7 +61,12 @@ export function SentMail({ history, onCompose }: { history: Receipt[]; onCompose
       const request = new AbortController();
       active = request; setBusy(true);
       try {
-        const result = await getEvents(ids, request.signal);
+        const result: Record<string, string> = {};
+        for (let offset = 0; offset < ids.length; offset += 30) {
+          if (offset) await new Promise(resolve => setTimeout(resolve, 350));
+          if (request.signal.aborted) return;
+          Object.assign(result, await getEvents(ids.slice(offset, offset + 30), request.signal));
+        }
         if (request.signal.aborted) return;
         setLocked(false); setNotice("");
         setEvents(previous => ({ ...previous, ...result }));
@@ -106,14 +111,17 @@ export function SentMail({ history, onCompose }: { history: Receipt[]; onCompose
     {notice && <p className="sent-notice" role="status">{notice} Showing the last known status.</p>}
     {visibleHistory.length === 0 ? <div className="empty"><MailOpen size={38}/><h3>No sent messages yet</h3><p>Your sent messages will appear here after Resend accepts them.</p><button className="primary" onClick={onCompose}><PenLine size={16}/>Compose email</button></div> :
       visibleHistory.map(r => {
-        const event = events[r.id] || "accepted";
+        const event = r.canceled ? "canceled" : events[r.id] || (r.scheduledAt ? "scheduled" : "accepted");
         const [label, color, description] = Object.hasOwn(labels, event) ? labels[event] : labels.unavailable;
         return <article className="receipt sent-receipt" key={r.id}>
           <button type="button" aria-expanded={shown === r.id} onClick={() => setShown(shown === r.id ? null : r.id)}>
-            <Mail size={18}/><span className="sent-summary"><b>{r.subject}</b><small>{r.to}</small></span>
+            <Mail size={18}/><span className="sent-summary"><b>{r.subject}</b><small>{r.to}</small>{r.scheduledAt && <small>Send time: {new Date(r.scheduledAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })} ({Intl.DateTimeFormat().resolvedOptions().timeZone})</small>}</span>
             <span className={"delivery-label " + color} title={description}>{label}</span><time>{new Date(r.at).toLocaleDateString()}</time>
           </button>
-          {shown === r.id && <div className="details"><small>From {r.from}</small>{r.cc && <small>Cc {r.cc}</small>}{r.bcc && <small>Bcc {r.bcc}</small>}<p>{r.message}</p><small>{description}</small><small><Check size={14}/> Accepted · {r.id}</small></div>}
+          {shown === r.id && <div className="details"><small>From {r.from}</small>{r.cc && <small>Cc {r.cc}</small>}{r.bcc && <small>Bcc {r.bcc}</small>}<p>{r.message}</p><small>{description}</small><small><Check size={14}/> Accepted · {r.id}</small>
+            {r.scheduledAt && event === "scheduled" && <CancelSchedule id={r.id} locked={locked} disabled={busy} onCanceled={() => {
+              onHistory(saveReceipt({ ...r, canceled: true }, history)); setEvents(previous => ({ ...previous, [r.id]: "canceled" }));
+            }}/>}</div>}
         </article>;
       })}
     {visibleHistory.length > 0 && <details className="status-guide"><summary>About delivery labels</summary>
@@ -121,4 +129,32 @@ export function SentMail({ history, onCompose }: { history: Receipt[]; onCompose
       <p>Opened means a tracking image loaded. Privacy tools can load it automatically or block it. To record opens on new emails, enable open tracking for your sending domain. <a href="https://resend.com/docs/dashboard/domains/tracking" target="_blank" rel="noreferrer">Tracking settings guide</a></p>
     </details>}
   </section>;
+}
+
+
+function CancelSchedule({ id, locked, disabled, onCanceled }: { id: string; locked: boolean; disabled: boolean; onCanceled: () => void }) {
+  const [confirm, setConfirm] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const pending = useRef(false);
+  async function cancel() {
+    if (pending.current) return;
+    pending.current = true; setBusy(true); setError("");
+    try {
+      const response = await fetch("/api/replies/scheduled?id=" + encodeURIComponent(id), { method: "DELETE", credentials: "same-origin" });
+      const result = await response.json() as { canceled?: boolean; error?: string };
+      if (!response.ok || !result.canceled) throw Error(result.error || "Could not confirm cancellation.");
+      onCanceled();
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not cancel. Try again."); }
+    finally { pending.current = false; setBusy(false); }
+  }
+  if (locked) return <p><a href="/replies">Unlock Replies</a> to cancel this scheduled email.</p>;
+  return <div className="schedule-cancel">
+    {!confirm ? <button className="inbox-control" disabled={disabled} onClick={() => setConfirm(true)}>Cancel scheduled send</button> : <>
+      <span>Stop this email from sending?</span>
+      <button className="inbox-control" disabled={busy || disabled} onClick={() => void cancel()}>{busy ? "Canceling…" : "Yes, cancel send"}</button>
+      <button className="inbox-control" disabled={busy} onClick={() => setConfirm(false)}>Keep scheduled</button>
+    </>}
+    {error && <p role="alert">{error}</p>}
+  </div>;
 }

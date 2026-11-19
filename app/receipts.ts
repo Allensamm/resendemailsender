@@ -1,6 +1,6 @@
-export type Draft = { to: string; cc: string; bcc: string; subject: string; message: string };
+export type Draft = { to: string; cc: string; bcc: string; subject: string; message: string; scheduledAt?: string };
 export type Receipt = Draft & {
-  id: string; at: string; from: string;
+  id: string; at: string; from: string; canceled?: boolean;
   threadId?: string;
   parent?: { id: string; from: string; date: string };
 };
@@ -8,6 +8,7 @@ export type Receipt = Draft & {
 const historyKey = "letterpress.receipts.v1";
 export function isDraft(value: unknown): value is Draft {
   return Boolean(value && typeof value === "object" &&
+    ((value as Record<string, unknown>).scheduledAt === undefined || typeof (value as Record<string, unknown>).scheduledAt === "string") &&
     ["to", "cc", "bcc", "subject", "message"].every(k => typeof (value as Record<string, unknown>)[k] === "string"));
 }
 
@@ -21,7 +22,10 @@ export function readReceipts(): Receipt[] {
 
 export function saveReceipt(receipt: Receipt, fallback: Receipt[] = []) {
   const stored = readReceipts();
-  const records = [receipt, ...(stored.length ? stored : fallback).filter(r => r.id !== receipt.id)].slice(0, 30);
+  const all = [receipt, ...(stored.length ? stored : fallback).filter(r => r.id !== receipt.id)];
+  // Keep future schedules visible even after 30 more messages are composed.
+  let ordinary = 0;
+  const records = all.filter(r => (r.scheduledAt && !r.canceled && Date.parse(r.scheduledAt) > Date.now()) || ordinary++ < 30);
   try { localStorage.setItem(historyKey, JSON.stringify(records)); } catch { /* Keep this view usable without storage. */ }
   return records;
 }

@@ -53,3 +53,9 @@ The tests use a mock provider. A successful send returns Resend's email ID and i
 
 
 Use the trash button on a conversation or **Delete** beneath a message to hide it in this browser. **Undo** restores the last deletion until you leave or reload the page. Hidden incoming messages do not contribute to the unread badge. Hidden outgoing messages are also omitted from Sent mail, while retained receipt data can still connect future replies. Deletions are local browser markers, not Resend API deletions, and do not synchronize to other devices. Clearing site data restores hidden messages from Resend. New replies to a hidden conversation appear normally.
+
+## Scheduled sending
+
+In Compose, enable **Send later**, choose a date and time in the displayed browser timezone, and select **Schedule email**. Scheduling uses Resend's `scheduledAt` API, so emails send even when Letterpress is closed. Dates must be at least one minute ahead and no more than 30 days ahead. The backend validates the timestamp and sends an absolute UTC time. Drafts retain their selected time, and retries preserve their idempotency key.
+
+Scheduled messages appear in Sent mail with the send time. Open one and select **Cancel scheduled send**, then confirm. Cancellation requires the saved Replies login and checks that the email belongs to the current sender. Already-sent emails cannot be canceled. Future scheduled receipts are kept beyond the usual last-30 receipt limit in this browser. Resend remains the source of delivery status; clearing browser storage removes local receipts but does not cancel scheduled sends. You can also manage scheduled messages in the Resend dashboard.

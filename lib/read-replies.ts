@@ -205,3 +205,26 @@ async function mailboxResponse(request: Request, settings: { apiKey?: string; ma
     return json({ error: "Could not reach Resend. Try again." }, 502);
   }
 }
+
+export async function cancelScheduledEmail(request: Request, settings: { password?: string; apiKey?: string; sender: string }) {
+  const access = inboxAccess(request, settings.password);
+  if (access instanceof Response) return access;
+  const origin = request.headers.get("origin");
+  if (origin && origin !== new URL(request.url).origin) return json({ error: "Invalid request origin." }, 403);
+  const id = new URL(request.url).searchParams.get("id") || "";
+  if (!uuid.test(id)) return json({ error: "Select a valid scheduled email." }, 400);
+  if (!settings.apiKey || !settings.sender) return json({ error: "Configure the sender first." }, 503);
+  try {
+    const resend = new Resend(settings.apiKey);
+    const options = { signal: AbortSignal.timeout(12000) };
+    const { data, error } = await resend.emails.get(id, options);
+    if (error) return providerError(error);
+    const address = (value: string) => (value.match(/<([^<>]+)>\s*$/)?.[1] || value).trim().toLowerCase();
+    if (address(data.from) !== address(settings.sender)) return json({ error: "This email does not belong to the current sender." }, 404);
+    if (data.last_event === "canceled") return json({ id, canceled: true });
+    if (data.last_event !== "scheduled") return json({ error: "This email is no longer scheduled. Refresh its status." }, 409);
+    const result = await resend.emails.cancel(id, options);
+    if (result.error) return providerError(result.error);
+    return json({ id, canceled: true });
+  } catch { return json({ error: "Could not confirm cancellation. Refresh its status before trying again." }, 502); }
+}

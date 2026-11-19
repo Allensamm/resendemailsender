@@ -61,3 +61,11 @@ footer{border-top:1px solid #dcdedc;margin:37px 0 20px;padding-top:17px;display:
 .thread-message-wrap { display: flex; flex-direction: column; align-items: stretch; }
 .thread-delete { align-self: center; font-size: 11px; opacity: .65; margin-top: 3px; }
 .thread-delete:hover, .thread-delete:focus-visible { opacity: 1; color: #a23f3f; }
+
+.schedule-panel { margin: 0 28px 20px; padding: 16px; background: #f5f7fc; border: 1px solid #e1e6ef; border-radius: 12px; }
+.schedule-toggle { display: flex; align-items: center; gap: 10px; font-size: 14px; font-weight: 600; cursor: pointer; }
+.schedule-toggle input { width: 17px; height: 17px; accent-color: #2855d9; }
+.schedule-panel .field { margin-top: 16px; }
+.schedule-help, .schedule-preview { font-size: 14px; line-height: 1.5; color: #53627a; }
+.schedule-preview { display: flex; gap: 8px; align-items: center; padding: 12px 0; }
+.schedule-cancel { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-top: 12px; }

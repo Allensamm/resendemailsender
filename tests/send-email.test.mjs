@@ -43,3 +43,25 @@ test("preserves provider errors and handles a network interruption", async t => 
   transport.mock.mockImplementation(async () => { throw new Error("Network offline"); });
   assert.equal((await sendEmail(request(draft), settings)).status, 502);
 });
+
+test("scheduling passes an absolute UTC time to Resend and keeps the idempotency key", async t => {
+  let sent;
+  t.mock.method(Date, "now", () => Date.parse("2026-11-19T10:00:00Z"));
+  t.mock.method(globalThis, "fetch", async (url, options) => {
+    sent = { headers: new Headers(options.headers), body: JSON.parse(options.body) };
+    return Response.json({ id: "scheduled-receipt" });
+  });
+  const response = await sendEmail(request({ ...draft, scheduledAt: "2026-11-20T10:30:00+01:00" }), settings);
+  assert.deepEqual(await response.json(), { id: "scheduled-receipt", scheduledAt: "2026-11-20T09:30:00.000Z" });
+  assert.equal(sent.body.scheduled_at, "2026-11-20T09:30:00.000Z");
+  assert.equal(sent.headers.get("Idempotency-Key"), key);
+});
+
+test("invalid, past, ambiguous and out-of-range schedules never send immediately", async t => {
+  t.mock.method(Date, "now", () => Date.parse("2026-11-19T10:00:00Z"));
+  const transport = t.mock.method(globalThis, "fetch", () => { throw Error("Unexpected send"); });
+  for (const scheduledAt of ["", null, 123, "tomorrow", "2026-11-20T10:00", "2026-11-18T10:00:00Z", "2026-11-19T10:00:30Z", "2026-12-20T10:00:00Z"]) {
+    assert.equal((await sendEmail(request({ ...draft, scheduledAt }), settings)).status, 400);
+  }
+  assert.equal(transport.mock.callCount(), 0);
+});

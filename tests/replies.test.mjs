@@ -166,3 +166,28 @@ test("reply target is protected, mailbox-scoped, and requires a real parent mess
   assert.equal(target.threadId, "<root@example.org>");
   assert.equal(target.subject, "Re: First message");
 });
+
+test("scheduled cancellation requires inbox access, checks sender and handles safe retries", async t => {
+  const { cancelScheduledEmail } = await import("../lib/read-replies.ts");
+  const config = { ...settings, sender: "samantha@sovernpartners.com" };
+  const cancelRequest = (authorized = true, origin) => new Request("https://example.org/api/replies/scheduled?id=" + id, {
+    method: "DELETE", headers: { ...(authorized && { authorization: "Bearer " + encodeURIComponent(settings.password) }), ...(origin && { origin }) },
+  });
+  let state = "scheduled", from = config.sender, cancellations = 0;
+  const transport = t.mock.method(globalThis, "fetch", async (url) => {
+    if (String(url).endsWith("/cancel")) { cancellations++; state = "canceled"; return Response.json({ id, object: "email" }); }
+    return Response.json({ id, from, last_event: state });
+  });
+  assert.equal((await cancelScheduledEmail(cancelRequest(false), config)).status, 401);
+  assert.equal((await cancelScheduledEmail(cancelRequest(true, "https://other.org"), config)).status, 403);
+  assert.equal(transport.mock.callCount(), 0);
+  from = "other@example.org";
+  assert.equal((await cancelScheduledEmail(cancelRequest(), config)).status, 404);
+  from = config.sender; state = "delivered";
+  assert.equal((await cancelScheduledEmail(cancelRequest(), config)).status, 409);
+  assert.equal(cancellations, 0);
+  state = "scheduled";
+  assert.deepEqual(await (await cancelScheduledEmail(cancelRequest(), config)).json(), { id, canceled: true });
+  assert.deepEqual(await (await cancelScheduledEmail(cancelRequest(), config)).json(), { id, canceled: true });
+  assert.equal(cancellations, 1);
+});
