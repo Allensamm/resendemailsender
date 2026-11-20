@@ -108,7 +108,7 @@ async function getInbound(resend: Resend, id: string, mailbox: string) {
   return data;
 }
 
-export async function resolveReplyTarget(request: Request, settings: { password?: string; apiKey?: string; mailbox: string }) {
+export async function resolveReplyTarget(request: Request, settings: { password?: string; apiKey?: string; mailbox: string; sender?: string }) {
   const access = inboxAccess(request, settings.password);
   if (access instanceof Response) return access;
   const origin = request.headers.get("origin");
@@ -125,7 +125,7 @@ export async function resolveReplyTarget(request: Request, settings: { password?
   }
 }
 
-export async function readReplies(request: Request, settings: { password?: string; apiKey?: string; mailbox: string }) {
+export async function readReplies(request: Request, settings: { password?: string; apiKey?: string; mailbox: string; sender?: string }) {
   const expires = inboxAccess(request, settings.password);
   if (expires instanceof Response) return expires;
   const response = await mailboxResponse(request, settings);
@@ -134,22 +134,23 @@ export async function readReplies(request: Request, settings: { password?: strin
   return response;
 }
 
-async function sentStatuses(resend: Resend, ids: string[]) {
+async function sentStatuses(resend: Resend, ids: string[], sender?: string) {
   if (!ids.length || ids.length > 30 || ids.some(id => !uuid.test(id))) {
     return json({ error: "Invalid sent message identifiers." }, 400);
   }
   const options = { signal: AbortSignal.timeout(10000) };
   const events: Record<string, string> = {};
+  const belongs = (from: string) => !sender || (from.match(/<([^<>]+)>$/)?.[1] || from).trim().toLowerCase() === (sender.match(/<([^<>]+)>$/)?.[1] || sender).trim().toLowerCase();
   if (ids.length === 1) {
     const { data, error } = await resend.emails.get(ids[0], options);
     if (error?.statusCode === 404) return json({ events });
     if (error) return sentStatusError(error);
-    if (data.id === ids[0]) events[data.id] = data.last_event;
+    if (data.id === ids[0] && belongs(data.from)) events[data.id] = data.last_event;
   } else {
     const { data, error } = await resend.emails.list({ limit: 100 }, options);
     if (error) return sentStatusError(error);
     for (const message of data.data) {
-      if (ids.includes(message.id)) events[message.id] = message.last_event;
+      if (ids.includes(message.id) && belongs(message.from)) events[message.id] = message.last_event;
     }
   }
   return json({ events });
@@ -163,7 +164,7 @@ function sentStatusError(error: ErrorResponse) {
   return json({ error: "Could not retrieve delivery status from Resend." }, 502);
 }
 
-async function mailboxResponse(request: Request, settings: { apiKey?: string; mailbox: string }) {
+async function mailboxResponse(request: Request, settings: { apiKey?: string; mailbox: string; sender?: string }) {
   if (!settings.apiKey || !settings.mailbox) return json({ error: "Configure the Resend API key and receiving address on the server." }, 503);
   const params = new URL(request.url).searchParams;
   const badge = params.get("view") === "badge";
@@ -176,7 +177,7 @@ async function mailboxResponse(request: Request, settings: { apiKey?: string; ma
   const options = { signal: AbortSignal.timeout(12000) };
   try {
     if (params.get("view") === "sent-status") {
-      return await sentStatuses(resend, [...new Set(params.getAll("receipt"))]);
+      return await sentStatuses(resend, [...new Set(params.getAll("receipt"))], settings.sender);
     }
     if (id) {
       const data = await getInbound(resend, id, settings.mailbox);

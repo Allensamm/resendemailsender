@@ -1,3 +1,4 @@
+import { mailboxKey } from "./mailbox.ts";
 import type { EmailSignature } from "../lib/signature";
 export type Draft = { to: string; cc: string; bcc: string; subject: string; message: string; scheduledAt?: string };
 export type Receipt = Draft & {
@@ -15,7 +16,7 @@ export function isDraft(value: unknown): value is Draft {
 
 export function readReceipts(): Receipt[] {
   try {
-    const value: unknown = JSON.parse(localStorage.getItem(historyKey) || "[]");
+    const value: unknown = JSON.parse(localStorage.getItem(mailboxKey(historyKey)) || "[]");
     return Array.isArray(value) ? value.filter(r => isDraft(r) &&
       ["id", "at", "from"].every(k => typeof (r as Record<string, unknown>)[k] === "string")) : [];
   } catch { return []; }
@@ -27,6 +28,6 @@ export function saveReceipt(receipt: Receipt, fallback: Receipt[] = []) {
   // Keep future schedules visible even after 30 more messages are composed.
   let ordinary = 0;
   const records = all.filter(r => (r.scheduledAt && !r.canceled && Date.parse(r.scheduledAt) > Date.now()) || ordinary++ < 30);
-  try { localStorage.setItem(historyKey, JSON.stringify(records)); } catch { /* Keep this view usable without storage. */ }
+  try { localStorage.setItem(mailboxKey(historyKey), JSON.stringify(records)); } catch { /* Keep this view usable without storage. */ }
   return records;
 }

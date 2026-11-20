@@ -1,4 +1,5 @@
 "use client";
+import { mailboxFetch, mailboxKey } from "../mailbox";
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Paperclip, Reply, Send, Trash2 } from "lucide-react";
@@ -37,7 +38,7 @@ function EarlierMessage({ parent }: { parent: Parent }) {
   useEffect(() => {
     const controller = new AbortController();
     setError("");
-    fetch("/api/replies?id=" + encodeURIComponent(parent.id), { cache: "no-store", signal: controller.signal })
+    mailboxFetch("/api/replies?id=" + encodeURIComponent(parent.id), { cache: "no-store", signal: controller.signal })
       .then(async response => {
         if (!response.ok) throw Error("Could not load this message.");
         const result = await response.json() as ReplyBody;
@@ -57,7 +58,7 @@ export function ReplyConversation({ message, body, messages, bodies, onDelete }:
   const [signature, setSignature] = useState<EmailSignature | null>(null);
   useEffect(() => {
     const controller = new AbortController();
-    fetch("/api/sender", { signal: controller.signal }).then(response => response.json()).then(result => setSignature((result as { signature?: EmailSignature }).signature || null)).catch(() => {});
+    mailboxFetch("/api/sender", { signal: controller.signal }).then(response => response.json()).then(result => setSignature((result as { signature?: EmailSignature }).signature || null)).catch(() => {});
     return () => controller.abort();
   }, []);
   const [history, setHistory] = useState<Receipt[]>([]);
@@ -68,7 +69,7 @@ export function ReplyConversation({ message, body, messages, bodies, onDelete }:
   const [error, setError] = useState("");
   const pending = useRef(false);
   const token = useRef("");
-  const draftKey = "letterpress.reply-draft." + message.id;
+  const draftKey = mailboxKey("letterpress.reply-draft." + message.id);
 
   useEffect(() => {
     setHistory(readReceipts());
@@ -90,7 +91,7 @@ export function ReplyConversation({ message, body, messages, bodies, onDelete }:
     if (pending.current || !text.trim() || !body.threadId) return;
     pending.current = true; setBusy(true); setError(""); setNotice("");
     try {
-      const response = await fetch("/api/replies/send?id=" + encodeURIComponent(message.id), {
+      const response = await mailboxFetch("/api/replies/send?id=" + encodeURIComponent(message.id), {
         method: "POST", credentials: "same-origin", headers: {
           "Content-Type": "application/json", "Idempotency-Key": token.current,
         }, body: JSON.stringify({ message: text }),

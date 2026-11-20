@@ -63,3 +63,9 @@ Scheduled messages appear in Sent mail with the send time. Open one and select *
 ## Email signature
 
 Mail sent as `samantha@sovernpartners.com` automatically includes the Sovern Partners signature: **Samanthan**, Executive Search & Headhunting, sender email and `https://sovernpartners.com`. The navy-and-gold signature uses email-compatible inline HTML with a plain-text equivalent and no external images. It is appended on the server for new messages, scheduled messages and threaded replies. Composer and reply previews show it separately, so do not paste it into the message body. New browser receipts retain the signature snapshot; older receipts are unchanged. Previously scheduled emails already held by Resend are unchanged. Signature content and rendering are in `lib/signature.ts`.
+
+## Mailboxes
+
+Use the header's Mailbox selector to switch between Samantha and Design. The `mailbox=design` URL selects the server-approved `design@sovernpartners.com` identity for sending, replying, receiving, unread counts, and schedule cancellation. Design has no signature; Samantha retains her configured identity and signature. Both mailboxes share the existing inbox password/session and Resend API key. The verified domain's receiving setup serves both addresses.
+
+Drafts, sent receipts, reply drafts, read markers, and local deletions are scoped to the selected mailbox. Samantha retains the existing browser storage keys. Different tabs can use different mailboxes. These are separate views within the same account, not separate user accounts; sent history remains browser-local as before.

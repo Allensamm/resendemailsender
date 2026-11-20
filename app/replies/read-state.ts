@@ -1,17 +1,18 @@
+import { mailboxKey } from "../mailbox";
 const readPrefix = "letterpress.reply.read.";
 const sessionKey = "letterpress.inbox.session-change";
 const eventName = "letterpress-inbox-change";
 const memory = new Set<string>();
 
 export function wasRead(id: string) {
-  try { return memory.has(id) || localStorage.getItem(readPrefix + id) === "1"; }
-  catch { return memory.has(id); }
+  try { return memory.has(mailboxKey(id)) || localStorage.getItem(mailboxKey(readPrefix + id)) === "1"; }
+  catch { return memory.has(mailboxKey(id)); }
 }
 
 export function markRead(id: string) {
   if (wasRead(id)) return;
-  memory.add(id);
-  try { localStorage.setItem(readPrefix + id, "1"); } catch { /* Keep this tab's read state. */ }
+  memory.add(mailboxKey(id));
+  try { localStorage.setItem(mailboxKey(readPrefix + id), "1"); } catch { /* Keep this tab's read state. */ }
   window.dispatchEvent(new CustomEvent(eventName, { detail: "read" }));
 }
 
@@ -39,14 +40,14 @@ export function onInboxChange(listener: (change: Change) => void) {
 
 const deletedPrefix = "letterpress.reply.deleted.";
 export function isDeleted(id: string) {
-  try { return localStorage.getItem(deletedPrefix + id) === "1"; }
+  try { return localStorage.getItem(mailboxKey(deletedPrefix + id)) === "1"; }
   catch { return false; }
 }
 export function setDeleted(ids: string[], hidden: boolean) {
   // Fail visibly when persistence is unavailable rather than promising a saved deletion.
   for (const id of ids) {
-    if (hidden) localStorage.setItem(deletedPrefix + id, "1");
-    else localStorage.removeItem(deletedPrefix + id);
+    if (hidden) localStorage.setItem(mailboxKey(deletedPrefix + id), "1");
+    else localStorage.removeItem(mailboxKey(deletedPrefix + id));
   }
   window.dispatchEvent(new CustomEvent(eventName, { detail: "deleted" }));
 }

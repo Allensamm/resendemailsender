@@ -1,4 +1,5 @@
 "use client";
+import { mailboxFetch, mailboxKey } from "./mailbox";
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { ArrowUpRight, CalendarClock, Eye, FilePenLine,  Plane, Send, ShieldCheck, Stamp, X } from "lucide-react";
@@ -60,7 +61,7 @@ export default function Home() {
     const selectView = () => setView(location.hash === "#sent" ? "sent" : "compose");
     selectView();
     window.addEventListener("hashchange", selectView);
-    const saved = readLocal(draftKey);
+    const saved = readLocal(mailboxKey(draftKey));
     if (isDraft(saved?.draft)) {
       setDraft(saved.draft); setCc(Boolean(saved.draft.cc)); setBcc(Boolean(saved.draft.bcc));
     }
@@ -68,10 +69,10 @@ export default function Home() {
     setHistory(readReceipts());
     setZone(Intl.DateTimeFormat().resolvedOptions().timeZone);
     setReady(true);
-    fetch("/api/sender").then(r => r.json()).then(s => { setFrom((s as { from: string }).from || "Configure sender address"); setSignature((s as { signature?: EmailSignature }).signature || null); }).catch(() => setFrom("Sender unavailable"));
+    mailboxFetch("/api/sender").then(r => r.json()).then(s => { setFrom((s as { from: string }).from || "Configure sender address"); setSignature((s as { signature?: EmailSignature }).signature || null); }).catch(() => setFrom("Sender unavailable"));
     return () => window.removeEventListener("hashchange", selectView);
   }, []);
-  useEffect(() => { if (ready) persist(draftKey, { draft, token }); }, [draft, token, ready]);
+  useEffect(() => { if (ready) persist(mailboxKey(draftKey), { draft, token }); }, [draft, token, ready]);
 
   function change(key: keyof Draft, value: string) {
     setDraft(previous => ({ ...previous, [key]: value })); setToken("send-email/" + crypto.randomUUID()); setNotice(null); setDiscard(false);
@@ -84,7 +85,7 @@ export default function Home() {
     if (sending.current || !ready) return;
     sending.current = true; setBusy(true); setNotice(null);
     try {
-      const result = await fetch("/api/send-email", { method: "POST", headers: { "Content-Type": "application/json", "Idempotency-Key": token }, body: JSON.stringify(draft) });
+      const result = await mailboxFetch("/api/send-email", { method: "POST", headers: { "Content-Type": "application/json", "Idempotency-Key": token }, body: JSON.stringify(draft) });
       const data = await result.json() as { id?: string; scheduledAt?: string; signature?: EmailSignature; error?: string };
       if (!result.ok || !data.id) throw new Error(data.error || "The server could not confirm this send.");
       const receipt = { ...draft, ...(data.signature && { signature: data.signature }), ...(data.scheduledAt && { scheduledAt: data.scheduledAt }), id: data.id, at: new Date().toISOString(), from };

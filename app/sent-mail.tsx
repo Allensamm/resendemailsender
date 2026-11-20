@@ -1,4 +1,5 @@
 "use client";
+import { mailboxFetch, mailboxUrl } from "./mailbox";
 
 import { useEffect, useRef, useState } from "react";
 import { Check, Inbox, Mail, MailOpen, PenLine, RefreshCw } from "lucide-react";
@@ -31,7 +32,7 @@ class StatusError extends Error {
 async function getEvents(ids: string[], signal: AbortSignal) {
   const query = new URLSearchParams({ view: "sent-status" });
   ids.forEach(id => query.append("receipt", id));
-  const response = await fetch("/api/replies?" + query, { cache: "no-store", signal });
+  const response = await mailboxFetch("/api/replies?" + query, { cache: "no-store", signal });
   if (!response.ok) {
     const result = await response.json() as { error?: string };
     throw new StatusError(result.error || "Could not refresh delivery status.", response.status);
@@ -108,7 +109,7 @@ export function SentMail({ history, onCompose, onHistory }: { history: Receipt[]
     <span className="count">{visibleHistory.length}</span>
     {visibleHistory.length > 0 && <button type="button" className="inbox-control" disabled={busy} onClick={() => setRevision(r => r + 1)}><RefreshCw size={14}/>{busy ? "Updating…" : "Refresh"}</button>}
   </header>
-    {locked && <p className="sent-notice"><a href="/replies">Unlock Replies</a> to see the latest delivery status.</p>}
+    {locked && <p className="sent-notice"><a href={mailboxUrl("/replies")}>Unlock Replies</a> to see the latest delivery status.</p>}
     {notice && <p className="sent-notice" role="status">{notice} Showing the last known status.</p>}
     {visibleHistory.length === 0 ? <div className="empty"><MailOpen size={38}/><h3>No sent messages yet</h3><p>Your sent messages will appear here after Resend accepts them.</p><button className="primary" onClick={onCompose}><PenLine size={16}/>Compose email</button></div> :
       visibleHistory.map(r => {
@@ -142,14 +143,14 @@ function CancelSchedule({ id, locked, disabled, onCanceled }: { id: string; lock
     if (pending.current) return;
     pending.current = true; setBusy(true); setError("");
     try {
-      const response = await fetch("/api/replies/scheduled?id=" + encodeURIComponent(id), { method: "DELETE", credentials: "same-origin" });
+      const response = await mailboxFetch("/api/replies/scheduled?id=" + encodeURIComponent(id), { method: "DELETE", credentials: "same-origin" });
       const result = await response.json() as { canceled?: boolean; error?: string };
       if (!response.ok || !result.canceled) throw Error(result.error || "Could not confirm cancellation.");
       onCanceled();
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not cancel. Try again."); }
     finally { pending.current = false; setBusy(false); }
   }
-  if (locked) return <p><a href="/replies">Unlock Replies</a> to cancel this scheduled email.</p>;
+  if (locked) return <p><a href={mailboxUrl("/replies")}>Unlock Replies</a> to cancel this scheduled email.</p>;
   return <div className="schedule-cancel">
     {!confirm ? <button className="inbox-control" disabled={disabled} onClick={() => setConfirm(true)}>Cancel scheduled send</button> : <>
       <span>Stop this email from sending?</span>

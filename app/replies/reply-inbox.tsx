@@ -1,4 +1,5 @@
 "use client";
+import { mailboxFetch } from "../mailbox";
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { ChevronLeft, Inbox, LockKeyhole, Mail, MailOpen, RefreshCw, Trash2 } from "lucide-react";
@@ -15,7 +16,7 @@ class InboxError extends Error {
 }
 
 async function load<T>(query: string, signal: AbortSignal, init?: RequestInit): Promise<T> {
-  const response = await fetch("/api/replies" + query, {
+  const response = await mailboxFetch("/api/replies" + query, {
     ...init, credentials: "same-origin", cache: "no-store", signal,
   });
   if (!response.ok) {

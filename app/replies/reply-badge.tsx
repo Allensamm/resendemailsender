@@ -1,4 +1,5 @@
 "use client";
+import { mailboxFetch } from "../mailbox";
 
 import { useEffect, useState } from "react";
 import { isDeleted, onInboxChange, wasRead } from "./read-state";
@@ -33,7 +34,7 @@ export function ReplyBadge() {
         do {
           const query = new URLSearchParams({ view: "badge" });
           if (after) query.set("after", after);
-          const response = await fetch("/api/replies?" + query, { cache: "no-store", signal: current.signal });
+          const response = await mailboxFetch("/api/replies?" + query, { cache: "no-store", signal: current.signal });
           if (current.signal.aborted) return;
           if (!response.ok) {
             if (response.status === 401 || response.status === 503) { locked = true; clear(); }
