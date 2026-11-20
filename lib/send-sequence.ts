@@ -1,3 +1,4 @@
+import { emailBody } from "./email-body.ts";
 import { Resend } from 'resend';
 import { validateAttachments } from './attachments.ts';
 import { senderAddress, replyMailbox, type MailSettings } from './send-email.ts';
@@ -28,13 +29,14 @@ export async function sendSequence(request: Request, settings: MailSettings) {
   if (!settings.RESEND_API_KEY || !from || !replyTo) return fail('Configure the sender and Resend key first.', 503);
   const resend = new Resend(settings.RESEND_API_KEY);
   const receipts: { id: string; to: string; scheduledAt: string }[] = [];
-  const escaped = data.message.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  let body;
+  try { body = emailBody(data.message, data.messageHtml); } catch (error) { return fail(error instanceof Error ? error.message : "Invalid message."); }
   const deadline = Date.now() + 45000;
   for (let index = 0; index < recipients.length; index++) {
     if (Date.now() > deadline) return Response.json({ receipts, error: 'Some schedules still need confirmation. Retry to continue safely.' });
     const scheduledAt = new Date(start + 120000 + (recipients.length === 1 ? 0 : Math.round(index * 1080000 / (recipients.length - 1)))).toISOString();
     try {
-      const { data: sent, error } = await resend.emails.send({ from, replyTo, to: [recipients[index]], subject: data.subject.trim(), text: data.message, html: '<div style="white-space:pre-wrap">' + escaped + '</div>', scheduledAt, ...(attachments.length ? { attachments } : {}) }, { idempotencyKey: token + '/' + index, signal: AbortSignal.timeout(10000) });
+      const { data: sent, error } = await resend.emails.send({ from, replyTo, to: [recipients[index]], subject: data.subject.trim(), text: body.text, html: body.html, scheduledAt, ...(attachments.length ? { attachments } : {}) }, { idempotencyKey: token + '/' + index, signal: AbortSignal.timeout(10000) });
       if (error || !sent?.id) return Response.json({ receipts, error: error?.message || 'Could not confirm this schedule. Retry safely.' });
       receipts.push({ id: sent.id, to: recipients[index], scheduledAt });
     } catch { return Response.json({ receipts, error: 'Connection interrupted. Retry to confirm the same schedules.' }); }

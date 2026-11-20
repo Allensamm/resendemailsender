@@ -1,4 +1,5 @@
 "use client";
+import { RichComposer, MessageContent } from "./rich-composer";
 import { SequenceSend } from "./sequence";
 import { AttachmentPicker } from "./attachment-picker";
 import type { MailAttachment } from "../lib/attachments";
@@ -127,7 +128,7 @@ export default function Home() {
                 <input id={key} type="email" multiple autoFocus value={draft[key]} onChange={e => change(key, e.target.value)} placeholder="recipient@example.com"/></div>)}
               </>}
               <div className="field"><label htmlFor="subject">Subject</label><input id="subject" required maxLength={500} value={draft.subject} onChange={e => change("subject", e.target.value)} placeholder="Add a subject line"/></div>
-              <div className="field"><label htmlFor="message">Message</label><div className="text-wrap"><textarea id="message" required maxLength={50000} value={draft.message} onChange={e => change("message", e.target.value)} placeholder="Write your message here…"/><div className="text-meta"><span>Plain text</span><span>{draft.message.length.toLocaleString()} characters</span></div></div></div>
+              <div className="field"><label htmlFor="message">Message</label><RichComposer id="message" label="Message" text={draft.message} html={draft.messageHtml} disabled={busy || !ready} onChange={(message, messageHtml) => { setDraft(previous => ({...previous, message, messageHtml})); setToken("send-email/" + crypto.randomUUID()); setNotice(null); }}/></div>
             </div>
             <AttachmentPicker files={files} disabled={busy || readingFiles} onBusy={setReadingFiles} onChange={value => { setFiles(value); setToken("send-email/" + crypto.randomUUID()); setNotice(null); }}/>
             {signature && <p className="signature-note">Your Sovern Partners signature is added automatically.</p>}
@@ -156,7 +157,7 @@ export default function Home() {
           <div className="preview-content"><div className="preview-address"><span>FROM</span><strong>{from || "Loading sender…"}</strong><span>TO</span><strong className={draft.to ? "" : "muted"}>{draft.to || "Recipient address"}</strong>
           {!allen && draft.cc && <><span>CC</span><strong>{draft.cc}</strong></>}{!allen && draft.bcc && <><span>BCC</span><strong>{draft.bcc}</strong></>}</div>
             {!allen && draft.scheduledAt && <p className="schedule-preview"><CalendarClock size={16}/>Scheduled for {displayTime(draft.scheduledAt)} ({zone})</p>}
-            <div className="preview-body"><h3>{draft.subject || "Your subject line"}</h3><p className={draft.message ? "" : "muted"}>{draft.message || "Your message will appear here as you type."}</p><SignaturePreview signature={signature}/></div></div>
+            <div className="preview-body"><h3>{draft.subject || "Your subject line"}</h3><MessageContent text={draft.message || "Your message will appear here as you type."} html={draft.messageHtml}/><SignaturePreview signature={signature}/></div></div>
         </section><div className="privacy"><ShieldCheck size={15}/><span>Sent securely through Resend</span></div></aside>
       </div> : <SentMail history={history} onHistory={setHistory} onCompose={() => { location.hash = ""; setView("compose"); }}/>}
       <footer><span><Stamp size={15}/>Letterpress</span><span>Powered by <a href="https://resend.com" target="_blank" rel="noreferrer">Resend <ArrowUpRight size={12}/></a></span></footer>

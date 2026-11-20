@@ -1,3 +1,4 @@
+import { emailBody } from "./email-body.ts";
 import { validateAttachments } from "./attachments.ts";
 import { Resend } from "resend";
 import { senderSignature, signatureHtml, signatureText } from "./signature.ts";
@@ -27,11 +28,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 const fail = (message: string, status: number) => Response.json({ error: message }, { status });
 const validAddress = /^[^\s@,;<>]+@[^\s@,;<>]+\.[^\s@,;<>]+$/;
-
-function messageHtml(message: string) {
-  const escaped = message.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-  return '<div style="white-space:pre-wrap">' + escaped + "</div>";
-}
 
 export type ThreadTarget = {
   to: string[];
@@ -89,8 +85,10 @@ export async function sendEmail(request: Request, settings: MailSettings, thread
   const replyTo = replyMailbox(settings);
   if (!replyTo) return fail("Set RESEND_REPLY_TO to a valid receiving address.", 503);
   const signature = senderSignature(from);
-  const text = data.message + (signature ? "\n\n" + signatureText(signature) : "");
-  const html = messageHtml(data.message) + (signature ? signatureHtml(signature) : "");
+  let body;
+  try { body = emailBody(data.message, data.messageHtml); } catch (error) { return fail(error instanceof Error ? error.message : "Invalid message.", 400); }
+  const text = body.text + (signature ? "\n\n" + signatureText(signature) : "");
+  const html = body.html + (signature ? signatureHtml(signature) : "");
   const resend = new Resend(settings.RESEND_API_KEY);
   try {
     const { data: receipt, error } = await resend.emails.send(

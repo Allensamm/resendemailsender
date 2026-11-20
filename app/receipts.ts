@@ -1,6 +1,6 @@
 import { mailboxKey } from "./mailbox.ts";
 import type { EmailSignature } from "../lib/signature";
-export type Draft = { to: string; cc: string; bcc: string; subject: string; message: string; scheduledAt?: string };
+export type Draft = { to: string; cc: string; bcc: string; subject: string; message: string; messageHtml?: string; scheduledAt?: string };
 export type Receipt = Draft & {
   id: string; at: string; from: string; canceled?: boolean; attachmentNames?: string[]; signature?: EmailSignature;
   threadId?: string;

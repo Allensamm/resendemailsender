@@ -1,4 +1,5 @@
 "use client";
+import { RichComposer, MessageContent } from "../rich-composer";
 import { AttachmentPicker } from "../attachment-picker";
 import type { MailAttachment } from "../../lib/attachments";
 import { mailboxFetch, mailboxKey } from "../mailbox";
@@ -15,16 +16,16 @@ import type { EmailSignature } from "../../lib/signature";
 
 type Parent = NonNullable<Receipt["parent"]>;
 
-function MessageBubble({ sender, date, text, attachments = [], outgoing = false, signature }: {
-  sender: string; date: string; text: string; attachments?: string[]; outgoing?: boolean; signature?: EmailSignature;
+function MessageBubble({ sender, date, text, attachments = [], outgoing = false, signature, html }: {
+  sender: string; date: string; text: string; attachments?: string[]; outgoing?: boolean; html?: string; signature?: EmailSignature;
 }) {
   const lines = text.split("\n");
-  const quoteStart = lines.findIndex(line => /^\s*(On .+wrote:|>+|[-_]{3,}\s*(Original Message|Forwarded message))/i.test(line));
+  const quoteStart = html ? -1 : lines.findIndex(line => /^\s*(On .+wrote:|>+|[-_]{3,}\s*(Original Message|Forwarded message))/i.test(line));
   const visible = quoteStart > 0 ? lines.slice(0, quoteStart).join("\n").trim() : text;
   const quoted = quoteStart > 0 ? lines.slice(quoteStart).join("\n") : "";
   return <article className={"thread-item" + (outgoing ? " thread-outgoing" : "")}>
     <strong className="thread-sender">{sender}</strong>
-    {visible && <p className="thread-text">{visible}</p>}
+    {visible && <MessageContent text={visible} html={html}/>}
     {quoted && <details className="thread-quoted"><summary>Earlier quoted text</summary><p className="thread-text">{quoted}</p></details>}
     {attachments.length > 0 && <div className="thread-attachments">{attachments.map((name, index) =>
       <div className="thread-attachment" key={index}><Paperclip size={17}/><span>{name}</span></div>)}</div>}
@@ -67,6 +68,7 @@ export function ReplyConversation({ message, body, messages, bodies, onDelete }:
   const [files, setFiles] = useState<MailAttachment[]>([]);
   const [readingFiles, setReadingFiles] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [messageHtml, setMessageHtml] = useState<string | undefined>(undefined);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
@@ -80,15 +82,16 @@ export function ReplyConversation({ message, body, messages, bodies, onDelete }:
     try {
       const saved = JSON.parse(sessionStorage.getItem(draftKey) || "null");
       if (typeof saved?.text === "string" && typeof saved.token === "string" && saved.text) {
-        setText(saved.text); token.current = saved.token; setEditing(true);
+        setText(saved.text); setMessageHtml(typeof saved.messageHtml === "string" ? saved.messageHtml : undefined); token.current = saved.token; setEditing(true);
       }
     } catch { /* Draft storage is optional. */ }
   }, [draftKey]);
 
-  function change(value: string) {
+  function change(value: string, html = messageHtml) {
+    setMessageHtml(html);
     setText(value); setError(""); setNotice("");
     token.current = "reply/" + crypto.randomUUID();
-    try { sessionStorage.setItem(draftKey, JSON.stringify({ text: value, token: token.current })); } catch { /* Keep the in-memory draft. */ }
+    try { sessionStorage.setItem(draftKey, JSON.stringify({ text: value, messageHtml: html, token: token.current })); } catch { /* Keep the in-memory draft. */ }
   }
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -98,17 +101,17 @@ export function ReplyConversation({ message, body, messages, bodies, onDelete }:
       const response = await mailboxFetch("/api/replies/send?id=" + encodeURIComponent(message.id), {
         method: "POST", credentials: "same-origin", headers: {
           "Content-Type": "application/json", "Idempotency-Key": token.current,
-        }, body: JSON.stringify({ message: text, attachments: files }),
+        }, body: JSON.stringify({ message: text, messageHtml, attachments: files }),
       });
       const result = await response.json() as { id?: string; from?: string; to?: string; subject?: string; signature?: EmailSignature; error?: string };
       if (!response.ok || !result.id || !result.from || !result.to || !result.subject) throw Error(result.error || "Could not confirm this reply. Retry this draft.");
       setHistory(saveReceipt({
         id: result.id, at: new Date().toISOString(), from: result.from, to: result.to, cc: "", bcc: "",
-        subject: result.subject, message: text, attachmentNames: files.map(file => file.filename), ...(result.signature && { signature: result.signature }), threadId: body.threadId,
+        subject: result.subject, message: text, messageHtml, attachmentNames: files.map(file => file.filename), ...(result.signature && { signature: result.signature }), threadId: body.threadId,
         parent: { id: message.id, from: message.from, date: message.date },
       }, history));
       try { sessionStorage.removeItem(draftKey); } catch { /* The reply was accepted. */ }
-      setFiles([]); setText(""); token.current = ""; setEditing(false); setNotice("Reply accepted by Resend.");
+      setFiles([]); setText(""); setMessageHtml(undefined); token.current = ""; setEditing(false); setNotice("Reply accepted by Resend.");
     } catch (cause) {
       setError(cause instanceof TypeError ? "Connection interrupted. Retry this draft to confirm the send." : cause instanceof Error ? cause.message : "Could not send your reply.");
     } finally { pending.current = false; setBusy(false); }
@@ -129,7 +132,7 @@ export function ReplyConversation({ message, body, messages, bodies, onDelete }:
       entries.push({ id: parent.id, at: parent.date, content: <EarlierMessage parent={parent}/> });
     }
     if (!isDeleted(receipt.id)) entries.push({ id: receipt.id, at: receipt.at, content:
-      <MessageBubble sender="You" date={receipt.at} text={receipt.message} signature={receipt.signature} attachments={receipt.attachmentNames} outgoing/> });
+      <MessageBubble sender="You" date={receipt.at} text={receipt.message} html={receipt.messageHtml} signature={receipt.signature} attachments={receipt.attachmentNames} outgoing/> });
   }
   entries.sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
   return <>
@@ -139,7 +142,7 @@ export function ReplyConversation({ message, body, messages, bodies, onDelete }:
       !editing ? <button type="button" className="primary" onClick={() => { setEditing(true); setNotice(""); }}><Reply size={15}/>Reply</button> :
       <form className="thread-compose" onSubmit={submit}>
         <div className="field"><label htmlFor="reply-message">Reply to {body.replyTo.join(", ")}</label>
-          <div className="text-wrap"><textarea id="reply-message" autoFocus required maxLength={50000} value={text} disabled={busy} onChange={e => change(e.target.value)} placeholder="Write your reply…"/></div></div>
+          <RichComposer id="reply-message" label="Reply message" text={text} html={messageHtml} disabled={busy} onChange={(value, html) => change(value, html)}/></div>
         <AttachmentPicker files={files} disabled={busy || readingFiles} onBusy={setReadingFiles} onChange={value => { setFiles(value); change(text); }}/>
         <SignaturePreview signature={signature}/>
         {signature && <p className="signature-note">Signature added automatically to this reply.</p>}
