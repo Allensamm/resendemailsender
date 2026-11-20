@@ -4,6 +4,7 @@ import type { MailSettings } from "./send-email.ts";
 export function mailboxSettings(request: Request, settings: MailSettings): MailSettings | Response {
   const mailbox = new URL(request.url).searchParams.get("mailbox") || "samantha";
   if (mailbox === "samantha") return settings;
+  if (mailbox === "allen") return { ...settings, RESEND_FROM: "Allen Samuel <allensamuel@grassrut.com>", RESEND_REPLY_TO: "allensamuel@grassrut.com" };
   if (mailbox === "design") return { ...settings, RESEND_FROM: "design@sovernpartners.com", RESEND_REPLY_TO: "design@sovernpartners.com" };
   return Response.json({ error: "Unknown mailbox." }, { status: 400 });
 }

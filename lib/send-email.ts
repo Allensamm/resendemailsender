@@ -1,3 +1,4 @@
+import { validateAttachments } from "./attachments.ts";
 import { Resend } from "resend";
 import { senderSignature, signatureHtml, signatureText } from "./signature.ts";
 
@@ -51,6 +52,8 @@ export async function sendEmail(request: Request, settings: MailSettings, thread
     return fail("The message could not be read.", 400);
   }
   if (!isRecord(data)) return fail("Enter a recipient, subject, and message.", 400);
+  let attachments;
+  try { attachments = validateAttachments(data.attachments); } catch (error) { return fail(error instanceof Error ? error.message : "Invalid attachments.", 400); }
   const envelope = thread ? { to: thread.to.join(","), cc: "", bcc: "", subject: thread.subject } : data;
   const recipients: { to: string[]; cc?: string[]; bcc?: string[] } = { to: [] };
   let count = 0;
@@ -91,7 +94,7 @@ export async function sendEmail(request: Request, settings: MailSettings, thread
   const resend = new Resend(settings.RESEND_API_KEY);
   try {
     const { data: receipt, error } = await resend.emails.send(
-      { from, replyTo, ...recipients, ...(scheduledAt && { scheduledAt }), ...(thread && { headers: thread.headers }), subject: envelope.subject.trim(), text, html },
+      { from, replyTo, ...recipients, ...(attachments.length ? { attachments } : {}), ...(scheduledAt && { scheduledAt }), ...(thread && { headers: thread.headers }), subject: envelope.subject.trim(), text, html },
       { idempotencyKey: token, signal: AbortSignal.timeout(15000) },
     );
     if (error) return fail(error.message, error.statusCode ?? 502);

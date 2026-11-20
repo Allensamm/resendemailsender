@@ -1,4 +1,6 @@
 "use client";
+import { AttachmentPicker } from "./attachment-picker";
+import type { MailAttachment } from "../lib/attachments";
 import { mailboxFetch, mailboxKey } from "./mailbox";
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
@@ -43,6 +45,8 @@ function Envelope({ to }: { to: string }) {
 }
 
 export default function Home() {
+  const [files, setFiles] = useState<MailAttachment[]>([]);
+  const [readingFiles, setReadingFiles] = useState(false);
   const [view, setView] = useState<"compose" | "sent">("compose");
   const [draft, setDraft] = useState<Draft>({ ...empty });
   const [token, setToken] = useState("");
@@ -78,17 +82,17 @@ export default function Home() {
     setDraft(previous => ({ ...previous, [key]: value })); setToken("send-email/" + crypto.randomUUID()); setNotice(null); setDiscard(false);
   }
   function reset() {
-    setDraft({ ...empty }); setToken("send-email/" + crypto.randomUUID()); setCc(false); setBcc(false); setDiscard(false);
+    setFiles([]); setDraft({ ...empty }); setToken("send-email/" + crypto.randomUUID()); setCc(false); setBcc(false); setDiscard(false);
   }
   async function submit(event: FormEvent) {
     event.preventDefault();
-    if (sending.current || !ready) return;
+    if (sending.current || readingFiles || !ready) return;
     sending.current = true; setBusy(true); setNotice(null);
     try {
-      const result = await mailboxFetch("/api/send-email", { method: "POST", headers: { "Content-Type": "application/json", "Idempotency-Key": token }, body: JSON.stringify(draft) });
+      const result = await mailboxFetch("/api/send-email", { method: "POST", headers: { "Content-Type": "application/json", "Idempotency-Key": token }, body: JSON.stringify({ ...draft, attachments: files }) });
       const data = await result.json() as { id?: string; scheduledAt?: string; signature?: EmailSignature; error?: string };
       if (!result.ok || !data.id) throw new Error(data.error || "The server could not confirm this send.");
-      const receipt = { ...draft, ...(data.signature && { signature: data.signature }), ...(data.scheduledAt && { scheduledAt: data.scheduledAt }), id: data.id, at: new Date().toISOString(), from };
+      const receipt = { ...draft, attachmentNames: files.map(file => file.filename), ...(data.signature && { signature: data.signature }), ...(data.scheduledAt && { scheduledAt: data.scheduledAt }), id: data.id, at: new Date().toISOString(), from };
       setHistory(saveReceipt(receipt, history)); reset();
       setNotice({ ok: true, text: data.scheduledAt ? "Scheduled for " + displayTime(data.scheduledAt) + " (" + zone + "). You can close the browser. Manage it in Sent mail." : "Resend accepted your email. Its message ID is in Sent mail." });
     } catch (error) {
@@ -114,6 +118,7 @@ export default function Home() {
               <div className="field"><label htmlFor="subject">Subject</label><input id="subject" required maxLength={500} value={draft.subject} onChange={e => change("subject", e.target.value)} placeholder="Add a subject line"/></div>
               <div className="field"><label htmlFor="message">Message</label><div className="text-wrap"><textarea id="message" required maxLength={50000} value={draft.message} onChange={e => change("message", e.target.value)} placeholder="Write your message here…"/><div className="text-meta"><span>Plain text</span><span>{draft.message.length.toLocaleString()} characters</span></div></div></div>
             </div>
+            <AttachmentPicker files={files} disabled={busy || readingFiles} onBusy={setReadingFiles} onChange={value => { setFiles(value); setToken("send-email/" + crypto.randomUUID()); setNotice(null); }}/>
             {signature && <p className="signature-note">Your Sovern Partners signature is added automatically.</p>}
             <div className="schedule-panel">
               <label className="schedule-toggle"><input type="checkbox" checked={draft.scheduledAt !== undefined} onChange={e => {
@@ -129,8 +134,8 @@ export default function Home() {
               </div>}
             </div>
             {notice && <div className={"notice " + (notice.ok ? "success" : "")} role={notice.ok ? "status" : "alert"}>{notice.text}</div>}
-            <div className="actions"><button type="submit" className="primary"><Send size={16}/>{busy ? (draft.scheduledAt !== undefined ? "Scheduling…" : "Sending…") : draft.scheduledAt !== undefined ? "Schedule email" : "Send email"}</button>
-              {discard ? <div className="discard"><span>Clear draft?</span><button type="button" onClick={() => { reset(); setNotice(null); }}>Clear</button><button type="button" onClick={() => setDiscard(false)}>Keep</button></div> : <button className="clear" type="button" disabled={!Object.values(draft).some(Boolean)} onClick={() => setDiscard(true)}>Clear draft</button>}
+            <div className="actions"><button type="submit" className="primary" disabled={readingFiles}><Send size={16}/>{busy ? (draft.scheduledAt !== undefined ? "Scheduling…" : "Sending…") : draft.scheduledAt !== undefined ? "Schedule email" : "Send email"}</button>
+              {discard ? <div className="discard"><span>Clear draft?</span><button type="button" onClick={() => { reset(); setNotice(null); }}>Clear</button><button type="button" onClick={() => setDiscard(false)}>Keep</button></div> : <button className="clear" type="button" disabled={!files.length && !Object.values(draft).some(Boolean)} onClick={() => setDiscard(true)}>Clear draft</button>}
             </div>
           </fieldset></form>
         </section>

@@ -45,3 +45,10 @@ test('mailbox navigation and stored drafts and receipts stay separate without mi
  saveReceipt({...receipt,id:'design',from:'design@sovernpartners.com'});assert.equal(readReceipts()[0].id,'design');
  window.location.search='';assert.deepEqual(readReceipts().map(r=>r.id),['samantha']);
 });
+
+test('Allen uses the confirmed Grassrut address and separate navigation/storage', () => {
+ const allen = mailboxSettings(req('mailbox=allen'), settings);
+ assert.equal(allen.RESEND_FROM, 'Allen Samuel <allensamuel@grassrut.com>');
+ assert.equal(allen.RESEND_REPLY_TO, 'allensamuel@grassrut.com');
+ assert.equal(mailboxUrl('/#sent', 'allen'), '/?mailbox=allen#sent');
+});

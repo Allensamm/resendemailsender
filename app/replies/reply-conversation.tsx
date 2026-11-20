@@ -1,4 +1,6 @@
 "use client";
+import { AttachmentPicker } from "../attachment-picker";
+import type { MailAttachment } from "../../lib/attachments";
 import { mailboxFetch, mailboxKey } from "../mailbox";
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
@@ -62,6 +64,8 @@ export function ReplyConversation({ message, body, messages, bodies, onDelete }:
     return () => controller.abort();
   }, []);
   const [history, setHistory] = useState<Receipt[]>([]);
+  const [files, setFiles] = useState<MailAttachment[]>([]);
+  const [readingFiles, setReadingFiles] = useState(false);
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
@@ -88,23 +92,23 @@ export function ReplyConversation({ message, body, messages, bodies, onDelete }:
   }
   async function submit(event: FormEvent) {
     event.preventDefault();
-    if (pending.current || !text.trim() || !body.threadId) return;
+    if (pending.current || readingFiles || !text.trim() || !body.threadId) return;
     pending.current = true; setBusy(true); setError(""); setNotice("");
     try {
       const response = await mailboxFetch("/api/replies/send?id=" + encodeURIComponent(message.id), {
         method: "POST", credentials: "same-origin", headers: {
           "Content-Type": "application/json", "Idempotency-Key": token.current,
-        }, body: JSON.stringify({ message: text }),
+        }, body: JSON.stringify({ message: text, attachments: files }),
       });
       const result = await response.json() as { id?: string; from?: string; to?: string; subject?: string; signature?: EmailSignature; error?: string };
       if (!response.ok || !result.id || !result.from || !result.to || !result.subject) throw Error(result.error || "Could not confirm this reply. Retry this draft.");
       setHistory(saveReceipt({
         id: result.id, at: new Date().toISOString(), from: result.from, to: result.to, cc: "", bcc: "",
-        subject: result.subject, message: text, ...(result.signature && { signature: result.signature }), threadId: body.threadId,
+        subject: result.subject, message: text, attachmentNames: files.map(file => file.filename), ...(result.signature && { signature: result.signature }), threadId: body.threadId,
         parent: { id: message.id, from: message.from, date: message.date },
       }, history));
       try { sessionStorage.removeItem(draftKey); } catch { /* The reply was accepted. */ }
-      setText(""); token.current = ""; setEditing(false); setNotice("Reply accepted by Resend.");
+      setFiles([]); setText(""); token.current = ""; setEditing(false); setNotice("Reply accepted by Resend.");
     } catch (cause) {
       setError(cause instanceof TypeError ? "Connection interrupted. Retry this draft to confirm the send." : cause instanceof Error ? cause.message : "Could not send your reply.");
     } finally { pending.current = false; setBusy(false); }
@@ -125,7 +129,7 @@ export function ReplyConversation({ message, body, messages, bodies, onDelete }:
       entries.push({ id: parent.id, at: parent.date, content: <EarlierMessage parent={parent}/> });
     }
     if (!isDeleted(receipt.id)) entries.push({ id: receipt.id, at: receipt.at, content:
-      <MessageBubble sender="You" date={receipt.at} text={receipt.message} signature={receipt.signature} outgoing/> });
+      <MessageBubble sender="You" date={receipt.at} text={receipt.message} signature={receipt.signature} attachments={receipt.attachmentNames} outgoing/> });
   }
   entries.sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
   return <>
@@ -136,10 +140,11 @@ export function ReplyConversation({ message, body, messages, bodies, onDelete }:
       <form className="thread-compose" onSubmit={submit}>
         <div className="field"><label htmlFor="reply-message">Reply to {body.replyTo.join(", ")}</label>
           <div className="text-wrap"><textarea id="reply-message" autoFocus required maxLength={50000} value={text} disabled={busy} onChange={e => change(e.target.value)} placeholder="Write your reply…"/></div></div>
+        <AttachmentPicker files={files} disabled={busy || readingFiles} onBusy={setReadingFiles} onChange={value => { setFiles(value); change(text); }}/>
         <SignaturePreview signature={signature}/>
         {signature && <p className="signature-note">Signature added automatically to this reply.</p>}
         {error && <p className="notice" role="alert">{error}</p>}
-        <div className="thread-actions"><button className="primary" type="submit" disabled={busy || !text.trim()}><Send size={15}/>{busy ? "Sending…" : "Send reply"}</button>
+        <div className="thread-actions"><button className="primary" type="submit" disabled={busy || readingFiles || !text.trim()}><Send size={15}/>{busy ? "Sending…" : "Send reply"}</button>
           <button className="inbox-control" type="button" disabled={busy} onClick={() => setEditing(false)}>Close</button></div>
       </form>}
   </>;
