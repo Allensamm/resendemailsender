@@ -1,4 +1,6 @@
 "use client";
+import { ReceivedAttachments } from "./received-attachments";
+import type { ReceivedFile } from "../../lib/read-replies";
 import { RichComposer, MessageContent } from "../rich-composer";
 import { AttachmentPicker } from "../attachment-picker";
 import type { MailAttachment } from "../../lib/attachments";
@@ -16,8 +18,8 @@ import type { EmailSignature } from "../../lib/signature";
 
 type Parent = NonNullable<Receipt["parent"]>;
 
-function MessageBubble({ sender, date, text, attachments = [], outgoing = false, signature, html }: {
-  sender: string; date: string; text: string; attachments?: string[]; outgoing?: boolean; html?: string; signature?: EmailSignature;
+function MessageBubble({ sender, date, text, attachments = [], outgoing = false, signature, html, files, messageId }: {
+  sender: string; date: string; text: string; attachments?: string[]; outgoing?: boolean; html?: string; files?: ReceivedFile[]; messageId?: string; signature?: EmailSignature;
 }) {
   const lines = text.split("\n");
   const quoteStart = html ? -1 : lines.findIndex(line => /^\s*(On .+wrote:|>+|[-_]{3,}\s*(Original Message|Forwarded message))/i.test(line));
@@ -27,7 +29,7 @@ function MessageBubble({ sender, date, text, attachments = [], outgoing = false,
     <strong className="thread-sender">{sender}</strong>
     {visible && <MessageContent text={visible} html={html}/>}
     {quoted && <details className="thread-quoted"><summary>Earlier quoted text</summary><p className="thread-text">{quoted}</p></details>}
-    {attachments.length > 0 && <div className="thread-attachments">{attachments.map((name, index) =>
+    {files?.length && messageId ? <ReceivedAttachments files={files} messageId={messageId}/> : attachments.length > 0 && <div className="thread-attachments">{attachments.map((name, index) =>
       <div className="thread-attachment" key={index}><Paperclip size={17}/><span>{name}</span></div>)}</div>}
     <SignaturePreview signature={signature}/>
     <time className="thread-time" dateTime={date} title={new Date(date).toLocaleString()}>{new Date(date).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</time>
@@ -50,7 +52,7 @@ function EarlierMessage({ parent }: { parent: Parent }) {
     return () => controller.abort();
   }, [attempt, parent.id]);
   return <div>
-    <MessageBubble sender={parent.from} date={parent.date} text={error || body?.text || (body ? "" : "Loading message…")} attachments={body?.attachments}/>
+    <MessageBubble sender={parent.from} date={parent.date} text={error || body?.text || (body ? "" : "Loading message…")} attachments={body?.attachments} files={body?.files} messageId={parent.id}/>
     {error && <button className="inbox-control" onClick={() => setAttempt(value => value + 1)}>Retry</button>}
   </div>;
 }
@@ -118,8 +120,8 @@ export function ReplyConversation({ message, body, messages, bodies, onDelete }:
   }
 
   const entries = messages.filter(item => !isDeleted(item.id)).map(item => ({ id: item.id, at: item.date, content:
-    item.id === message.id ? <MessageBubble sender={item.from} date={item.date} text={body.text} attachments={body.attachments}/> :
-    bodies[item.id] ? <MessageBubble sender={item.from} date={item.date} text={bodies[item.id].text} attachments={bodies[item.id].attachments}/> :
+    item.id === message.id ? <MessageBubble sender={item.from} date={item.date} text={body.text} attachments={body.attachments} files={body.files} messageId={item.id}/> :
+    bodies[item.id] ? <MessageBubble sender={item.from} date={item.date} text={bodies[item.id].text} attachments={bodies[item.id].attachments} files={bodies[item.id].files} messageId={item.id}/> :
     <EarlierMessage parent={item}/>
   }));
   const included = new Set(messages.map(item => item.id));

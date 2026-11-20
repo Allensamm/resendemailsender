@@ -83,3 +83,7 @@ Submission uses a dedicated server endpoint restricted to the Allen mailbox, val
 ## Rich-text composer
 
 New messages and replies use a formatting toolbar with bold, italic, underline, strikethrough, bulleted/numbered lists, links, undo/redo, and clear formatting. Rich HTML is preserved in drafts, sent receipts, and Allen’s saved individual sequences. Existing plain-text drafts still work. Previews and outgoing email HTML are sanitized with a restrictive allowlist; scripts, event handlers, remote images, unsafe links, and arbitrary styles are removed. A plain-text email alternative is derived from the sanitized HTML on the server. Attachments and signatures remain separate from the editable message.
+
+## Received attachments
+
+Reply threads show attachment cards with filenames and sizes. Common raster images (PNG, JPEG, GIF, WebP, AVIF) can be previewed and opened at full size; all files can be downloaded. Each action retrieves a fresh Resend attachment URL and streams the content through the existing authenticated, mailbox-scoped Replies endpoint. The server checks the parent message and attachment ID before retrieving bytes. Downloads use attachment disposition and no-store headers; active formats such as HTML and SVG are download-only. Previews are loaded on request, with retryable errors, rather than fetching sender-hosted tracking images.

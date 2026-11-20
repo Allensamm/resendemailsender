@@ -4,7 +4,8 @@ import { Resend, type ErrorResponse, type GetReceivingEmailResponseSuccess, type
 
 export type ReplySummary = { id: string; from: string; subject: string; date: string };
 export type ReplyPage = { mailbox: string; messages: ReplySummary[]; next: string | null };
-export type ReplyBody = { text: string; attachments: string[]; threadId: string | null; replyTo: string[]; referenceIds?: string[] };
+export type ReceivedFile = { id: string; filename: string; size: number; contentType: string };
+export type ReplyBody = { text: string; attachments: string[]; files?: ReceivedFile[]; threadId: string | null; replyTo: string[]; referenceIds?: string[] };
 
 const uuid = /^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i;
 function json(body: unknown, status = 200) {
@@ -182,6 +183,27 @@ async function mailboxResponse(request: Request, settings: { apiKey?: string; ma
     if (id) {
       const data = await getInbound(resend, id, settings.mailbox);
       if (data instanceof Response) return data;
+      const attachment = params.get("attachment");
+      if (attachment !== null) {
+        if (!uuid.test(attachment) || !data.attachments?.some(file => file.id === attachment)) return json({ error: "Attachment not found in this message." }, 404);
+        const result = await resend.emails.receiving.attachments.get({emailId:id,id:attachment}, options);
+        if (result.error) return providerError(result.error);
+        const file = result.data;
+        const url = new URL(file.download_url);
+        const allowedHost = url.hostname === "inbound-cdn.resend.com" || url.hostname.endsWith(".amazonaws.com");
+        if (url.protocol !== "https:" || !allowedHost || url.username || url.password) return json({ error: "The attachment download address is unavailable." }, 502);
+        const upstream = await fetch(url, {redirect:"error", signal:AbortSignal.timeout(60000)});
+        if (!upstream.ok || !upstream.body) return json({ error: "Could not download this attachment. Try again." }, 502);
+        const filename = (file.filename || "attachment").replace(/[\x00-\x1f\x7f/\\]/g,"_").slice(0,200);
+        const preview = params.get("preview") === "1";
+        const safeImage = /^(image\/(png|jpeg|gif|webp|avif))$/i.test(file.content_type);
+        if (preview && !safeImage) { await upstream.body.cancel(); return json({ error: "Preview is available for common image formats. Download this file to view it." }, 415); }
+        return new Response(upstream.body, {headers:{
+          "Content-Type":preview ? file.content_type : "application/octet-stream",
+          "Content-Disposition":(preview ? "inline" : "attachment") + "; filename*=UTF-8''" + encodeURIComponent(filename).replace(/['()*]/g, char => "%" + char.charCodeAt(0).toString(16)),
+          "Cache-Control":"private, no-store", "Vary":"Authorization, Cookie", "X-Content-Type-Options":"nosniff", "Content-Security-Policy":"default-src 'none'; sandbox",
+        }});
+      }
       const target = threadTarget(data);
       const text = data.text?.trim() ? data.text : convert(data.html || "", {
         wordwrap: false,
@@ -189,7 +211,8 @@ async function mailboxResponse(request: Request, settings: { apiKey?: string; ma
       });
       const headers = Object.fromEntries(Object.entries(data.headers || {}).map(([key, value]) => [key.toLowerCase(), value]));
       const referenceIds = headerIds([data.message_id, headers["message-id"], headers.references, headers["in-reply-to"]].filter(Boolean).map(value => value!.includes("<") ? value : "<" + value + ">").join(" "));
-      return json({ text, referenceIds, threadId: target?.threadId || null, replyTo: target?.to || [], attachments: (data.attachments || []).map(file => file.filename || "Unnamed attachment") } satisfies ReplyBody);
+      return json({ text, referenceIds, threadId: target?.threadId || null, replyTo: target?.to || [], attachments: (data.attachments || []).map(file => file.filename || "Unnamed attachment"),
+        ...(data.attachments?.length ? {files: data.attachments.map(file => ({id:file.id, filename:file.filename || "Unnamed attachment", size:file.size, contentType:file.content_type}))} : {}) } satisfies ReplyBody);
     }
 
     // This SDK version's receiving.list() omits Resend's recipient filter.
