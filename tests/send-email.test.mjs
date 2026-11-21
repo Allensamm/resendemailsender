@@ -77,7 +77,7 @@ test("Samantha's signature is appended once to new, scheduled and threaded mail 
   for (const [payload, target] of [[draft, undefined], [{ ...draft, scheduledAt: new Date(Date.now() + 86400000).toISOString() }, undefined], [draft, thread]]) {
     const result = await (await sendEmail(request(payload), signatureSettings, target)).json();
     assert.equal(result.signature.name, "Samanthan");
-    assert.equal(result.signature.website, "https://sovernpartners.com");
+    assert.equal(result.signature.website, undefined);
   }
   for (const envelope of envelopes) {
     assert.equal(envelope.text.split("Samanthan").length - 1, 1);
@@ -85,7 +85,7 @@ test("Samantha's signature is appended once to new, scheduled and threaded mail 
     assert.ok(envelope.text.startsWith(draft.message + "\n\n"));
     assert.match(envelope.html, /One &lt;two&gt; &amp; three/);
     assert.match(envelope.html, /href="mailto:samantha@sovernpartners.com"/);
-    assert.match(envelope.html, /href="https:\/\/sovernpartners.com"/);
+    assert.doesNotMatch(envelope.html, /href="https:\/\/sovernpartners.com"/);
     assert.doesNotMatch(envelope.html, /<img/);
   }
   assert.deepEqual(envelopes[2].headers, thread.headers);
