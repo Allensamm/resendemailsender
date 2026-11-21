@@ -62,7 +62,7 @@ Scheduled messages appear in Sent mail with the send time. Open one and select *
 
 ## Email signature
 
-Mail sent as `samantha@sovernpartners.com` automatically includes the Sovern Partners signature: **Samanthan**, Executive Search & Headhunting, sender email and `https://sovernpartners.com`. The navy-and-gold signature uses email-compatible inline HTML with a plain-text equivalent and no external images. It is appended on the server for new messages, scheduled messages and threaded replies. Composer and reply previews show it separately, so do not paste it into the message body. New browser receipts retain the signature snapshot; older receipts are unchanged. Previously scheduled emails already held by Resend are unchanged. Signature content and rendering are in `lib/signature.ts`.
+Mail sent as `samantha@sovernpartners.com` automatically includes the Sovern Partners signature: **Samantha**, Executive Search & Headhunting, sender email and company tagline. The navy-and-gold signature uses email-compatible inline HTML with a plain-text equivalent and no external images. It is appended on the server for new messages, scheduled messages and threaded replies. Composer and reply previews show it separately, so do not paste it into the message body. New browser receipts retain the signature snapshot; older receipts are unchanged. Previously scheduled emails already held by Resend are unchanged. Signature content and rendering are in `lib/signature.ts`.
 
 ## Mailboxes
 

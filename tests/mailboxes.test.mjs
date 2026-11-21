@@ -17,7 +17,7 @@ test('only approved mailboxes can be selected; Design sends without a signature'
  t.mock.method(globalThis,'fetch',async (_, options) => {sent=JSON.parse(options.body);return Response.json({id});});
  const response = await sendEmail(new Request('https://example.org/api/send-email?mailbox=design', {method:'POST',headers:{'content-type':'application/json','idempotency-key':'design/test'},body:JSON.stringify({to:'delivered@resend.dev',subject:'Design',message:'Hello',from:settings.RESEND_FROM})}),design);
  assert.equal(response.status,200);assert.equal((await response.json()).signature,undefined);
- assert.equal(sent.from,'design@sovernpartners.com');assert.equal(sent.reply_to,sent.from);assert.equal(sent.text,'Hello');assert.doesNotMatch(sent.html,/Samanthan|Sovern Partners/);
+ assert.equal(sent.from,'design@sovernpartners.com');assert.equal(sent.reply_to,sent.from);assert.equal(sent.text,'Hello');assert.doesNotMatch(sent.html,/Samantha|Sovern Partners/);
 });
 test('Design lists and counts only Design replies, rejects Samantha threads and hides her delivery statuses', async t => {
  const inbox={password:'secret',apiKey:'mock',mailbox:'design@sovernpartners.com',sender:'design@sovernpartners.com'};

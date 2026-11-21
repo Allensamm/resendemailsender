@@ -76,12 +76,12 @@ test("Samantha's signature is appended once to new, scheduled and threaded mail 
   const thread = { to: ["delivered@resend.dev"], subject: "Re: Hello", threadId: "<root@example.org>", headers: { "In-Reply-To": "<parent@example.org>", References: "<root@example.org> <parent@example.org>" } };
   for (const [payload, target] of [[draft, undefined], [{ ...draft, scheduledAt: new Date(Date.now() + 86400000).toISOString() }, undefined], [draft, thread]]) {
     const result = await (await sendEmail(request(payload), signatureSettings, target)).json();
-    assert.equal(result.signature.name, "Samanthan");
+    assert.equal(result.signature.name, "Samantha");
     assert.equal(result.signature.website, undefined);
   }
   for (const envelope of envelopes) {
-    assert.equal(envelope.text.split("Samanthan").length - 1, 1);
-    assert.equal(envelope.html.split("Samanthan").length - 1, 1);
+    assert.equal(envelope.text.split("Samantha").length - 1, 1);
+    assert.equal(envelope.html.split("Samantha").length - 1, 1);
     assert.ok(envelope.text.startsWith(draft.message + "\n\n"));
     assert.match(envelope.html, /One &lt;two&gt; &amp; three/);
     assert.match(envelope.html, /href="mailto:samantha@sovernpartners.com"/);

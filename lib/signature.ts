@@ -3,7 +3,7 @@ export type EmailSignature = { name: string; role: string; company: string; emai
 export function senderSignature(from: string): EmailSignature | null {
   const address = (from.match(/<([^<>]+)>$/)?.[1] || from).trim().toLowerCase();
   if (address !== "samantha@sovernpartners.com") return null;
-  return { name: "Samanthan", role: "Executive Search & Headhunting", company: "Sovern Partners", email: address, tagline: "Connecting exceptional leaders with ambitious organizations." };
+  return { name: "Samantha", role: "Executive Search & Headhunting", company: "Sovern Partners", email: address, tagline: "Connecting exceptional leaders with ambitious organizations." };
 }
 
 function escape(value: string) {
