@@ -37,3 +37,14 @@ test('Design schedules 20 private emails four minutes apart with stable retries'
  for(let i=0;i<20;i++) { assert.equal(Date.parse(sent[i].scheduled_at),Date.parse(data.startedAt)+120000+i*240000); assert.deepEqual(sent[i].to,[data.recipients[i]]); assert.equal(sent[i].from,config.RESEND_FROM); }
  await sendSequence(request(data,'design'),config); assert.deepEqual(sent.slice(0,20),sent.slice(20));
 });
+
+test('new Design batches use one-minute intervals and independent batch keys',async t=>{
+ t.mock.method(globalThis,'setTimeout',fn=>{queueMicrotask(fn);return 0;});
+ const sent=[];
+ t.mock.method(globalThis,'fetch',async(_,options)=>{sent.push({body:JSON.parse(options.body),key:new Headers(options.headers).get('idempotency-key')});return Response.json({id:'new-'+sent.length});});
+ const data={...payload(),intervalMinutes:1};
+ const first=request(data,'design');
+ const second=request(data,'design'); second.headers.set('idempotency-key','sequence/other');
+ await sendSequence(first,settings); await sendSequence(second,settings);
+ for(let i=0;i<20;i++) { assert.equal(Date.parse(sent[i].body.scheduled_at),Date.parse(data.startedAt)+120000+i*60000); assert.equal(sent[i].key,'sequence/test/'+i); assert.equal(sent[i+20].key,'sequence/other/'+i); }
+});
