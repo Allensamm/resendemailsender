@@ -5,7 +5,8 @@ import { senderAddress, replyMailbox, type MailSettings } from './send-email.ts'
 
 export async function sendSequence(request: Request, settings: MailSettings) {
   const fail = (error: string, status = 400) => Response.json({ error }, { status });
-  if (new URL(request.url).searchParams.get('mailbox') !== 'allen') return fail('Individual sequences are available in Allen Samuel’s mailbox only.');
+  const mailbox = new URL(request.url).searchParams.get('mailbox');
+  if (mailbox !== 'allen' && mailbox !== 'design') return fail('Individual sequences are available in Allen Samuel and Design mailboxes only.');
   if (request.headers.get('origin') && request.headers.get('origin') !== new URL(request.url).origin) return fail('Request origin is invalid.', 403);
   let raw: unknown;
   try { raw = await request.json(); } catch { return fail('Invalid message.'); }
@@ -34,7 +35,7 @@ export async function sendSequence(request: Request, settings: MailSettings) {
   const deadline = Date.now() + 45000;
   for (let index = 0; index < recipients.length; index++) {
     if (Date.now() > deadline) return Response.json({ receipts, error: 'Some schedules still need confirmation. Retry to continue safely.' });
-    const scheduledAt = new Date(start + 120000 + (recipients.length === 1 ? 0 : Math.round(index * 1080000 / (recipients.length - 1)))).toISOString();
+    const scheduledAt = new Date(start + 120000 + (mailbox === 'design' ? index * 240000 : recipients.length === 1 ? 0 : Math.round(index * 1080000 / (recipients.length - 1)))).toISOString();
     try {
       const { data: sent, error } = await resend.emails.send({ from, replyTo, to: [recipients[index]], subject: data.subject.trim(), text: body.text, html: body.html, scheduledAt, ...(attachments.length ? { attachments } : {}) }, { idempotencyKey: token + '/' + index, signal: AbortSignal.timeout(10000) });
       if (error || !sent?.id) return Response.json({ receipts, error: error?.message || 'Could not confirm this schedule. Retry safely.' });

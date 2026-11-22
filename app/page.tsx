@@ -47,7 +47,7 @@ function Envelope({ to }: { to: string }) {
 }
 
 export default function Home() {
-  const [allen, setAllen] = useState(false);
+  const [individual, setIndividual] = useState(false);
   const [files, setFiles] = useState<MailAttachment[]>([]);
   const [readingFiles, setReadingFiles] = useState(false);
   const [view, setView] = useState<"compose" | "sent">("compose");
@@ -65,7 +65,7 @@ export default function Home() {
   const [notice, setNotice] = useState<{ text: string; ok: boolean } | null>(null);
   const [discard, setDiscard] = useState(false);
   useEffect(() => {
-    setAllen(currentMailbox() === "allen");
+    setIndividual(["allen", "design"].includes(currentMailbox()));
     const selectView = () => setView(location.hash === "#sent" ? "sent" : "compose");
     selectView();
     window.addEventListener("hashchange", selectView);
@@ -112,9 +112,9 @@ export default function Home() {
       </div>
       {view === "compose" ? <div className="columns">
         <section className="card composer"><header className="card-heading"><span className="tile"><FilePenLine/></span><h2>New message</h2><span className="draft-badge"><i/>Draft</span></header>
-          <form onSubmit={event => { if (allen) event.preventDefault(); else void submit(event); }}><fieldset disabled={busy || !ready}>
+          <form onSubmit={event => { if (individual) event.preventDefault(); else void submit(event); }}><fieldset disabled={busy || !ready}>
             <div className="fields">
-              {allen ? <div className="field"><label>Recipients</label><p className="schedule-help">One address per box. Each recipient sees only their own address.</p>
+              {individual ? <div className="field"><label>Recipients</label><p className="schedule-help">One address per box. Each recipient sees only their own address.</p>
                 {draft.to.split(",").map((address, index, addresses) => <div className="recipient-row" key={index}>
                   <input type="email" aria-label={"Recipient " + (index + 1)} value={address} onChange={event => { const next = [...addresses]; next[index] = event.target.value; change("to", next.join(",")); }} placeholder={"Recipient " + (index + 1) + " email address"}/>
                   {addresses.length > 1 && <button type="button" className="inbox-control" aria-label={"Remove recipient " + (index + 1)} onClick={() => change("to", addresses.filter((_, i) => i !== index).join(","))}>Remove</button>}
@@ -132,7 +132,7 @@ export default function Home() {
             </div>
             <AttachmentPicker files={files} disabled={busy || readingFiles} onBusy={setReadingFiles} onChange={value => { setFiles(value); setToken("send-email/" + crypto.randomUUID()); setNotice(null); }}/>
             {signature && <p className="signature-note">Your Sovern Partners signature is added automatically.</p>}
-            {!allen && <div className="schedule-panel">
+            {!individual && <div className="schedule-panel">
               <label className="schedule-toggle"><input type="checkbox" checked={draft.scheduledAt !== undefined} onChange={e => {
                 if (e.target.checked) change("scheduledAt", new Date(Date.now() + 3600000).toISOString());
                 else { setDraft(previous => { const next = { ...previous }; delete next.scheduledAt; return next; }); setToken("send-email/" + crypto.randomUUID()); setNotice(null); }
@@ -147,7 +147,7 @@ export default function Home() {
             </div>
             }
             {notice && <div className={"notice " + (notice.ok ? "success" : "")} role={notice.ok ? "status" : "alert"}>{notice.text}</div>}
-            {allen ? <SequenceSend draft={draft} files={files} disabled={readingFiles || !ready} from={from} onHistory={setHistory} onComplete={reset} onBusy={setBusy}/> : <div className="actions"><button type="submit" className="primary" disabled={readingFiles}><Send size={16}/>{busy ? (draft.scheduledAt !== undefined ? "Scheduling…" : "Sending…") : draft.scheduledAt !== undefined ? "Schedule email" : "Send email"}</button>
+            {individual ? <SequenceSend draft={draft} files={files} disabled={readingFiles || !ready} from={from} onHistory={setHistory} onComplete={reset} onBusy={setBusy}/> : <div className="actions"><button type="submit" className="primary" disabled={readingFiles}><Send size={16}/>{busy ? (draft.scheduledAt !== undefined ? "Scheduling…" : "Sending…") : draft.scheduledAt !== undefined ? "Schedule email" : "Send email"}</button>
               {discard ? <div className="discard"><span>Clear draft?</span><button type="button" onClick={() => { reset(); setNotice(null); }}>Clear</button><button type="button" onClick={() => setDiscard(false)}>Keep</button></div> : <button className="clear" type="button" disabled={!files.length && !Object.values(draft).some(Boolean)} onClick={() => setDiscard(true)}>Clear draft</button>}
             </div>
           }</fieldset></form>
@@ -155,8 +155,8 @@ export default function Home() {
         <aside><section className="card preview"><header className="card-heading"><span className="tile"><Eye/></span><h2>Email preview</h2><span className="live"><i/>Live</span></header>
           <Envelope to={draft.to}/>
           <div className="preview-content"><div className="preview-address"><span>FROM</span><strong>{from || "Loading sender…"}</strong><span>TO</span><strong className={draft.to ? "" : "muted"}>{draft.to || "Recipient address"}</strong>
-          {!allen && draft.cc && <><span>CC</span><strong>{draft.cc}</strong></>}{!allen && draft.bcc && <><span>BCC</span><strong>{draft.bcc}</strong></>}</div>
-            {!allen && draft.scheduledAt && <p className="schedule-preview"><CalendarClock size={16}/>Scheduled for {displayTime(draft.scheduledAt)} ({zone})</p>}
+          {!individual && draft.cc && <><span>CC</span><strong>{draft.cc}</strong></>}{!individual && draft.bcc && <><span>BCC</span><strong>{draft.bcc}</strong></>}</div>
+            {!individual && draft.scheduledAt && <p className="schedule-preview"><CalendarClock size={16}/>Scheduled for {displayTime(draft.scheduledAt)} ({zone})</p>}
             <div className="preview-body"><h3>{draft.subject || "Your subject line"}</h3><MessageContent text={draft.message || "Your message will appear here as you type."} html={draft.messageHtml}/><SignaturePreview signature={signature}/></div></div>
         </section><div className="privacy"><ShieldCheck size={15}/><span>Sent securely through Resend</span></div></aside>
       </div> : <SentMail history={history} onHistory={setHistory} onCompose={() => { location.hash = ""; setView("compose"); }}/>}
