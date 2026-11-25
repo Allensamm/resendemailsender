@@ -13,7 +13,7 @@ export function WorkspaceHeader({ current }: { current: "compose" | "sent" | "re
     { id: "replies", href: "/replies", label: "Replies", Icon: MailOpen },
   ];
   return <header className="top"><div className="top-inner">
-    <a className="brand" href={mailboxUrl("/", mailbox)} aria-label="Letterpress home"><span className="logo"><Send size={23} strokeWidth={2}/></span>Letterpress</a>
+    <a className="brand" href={mailboxUrl("/", mailbox)} aria-label="Letterpress home"><span className="logo"><Send size={23} strokeWidth={2}/></span><span className="brand-wordmark">Letterpress<small>Your email studio</small></span></a>
     <label className="mailbox-switch">Mailbox
       <select aria-label="Mailbox" value={mailbox} onChange={event => {
         window.location.href = mailboxUrl(window.location.pathname + window.location.hash, event.target.value as Mailbox);
