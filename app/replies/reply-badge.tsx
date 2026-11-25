@@ -1,5 +1,5 @@
 "use client";
-import { mailboxFetch } from "../mailbox";
+import { mailboxFetch, mailboxUrl } from "../mailbox";
 
 import { useEffect, useState } from "react";
 import { isDeleted, onInboxChange, wasRead } from "./read-state";
@@ -79,5 +79,5 @@ export function ReplyBadge() {
 
   if (count === null) return null;
   const display = count > 99 ? "99+" : String(count);
-  return <span className="reply-badge" role="status" aria-live="polite" aria-atomic="true" title="Unread replies · checks every 15 seconds while this page is open" aria-label={display + " unread replies"}>{display}</span>;
+  return <a href={mailboxUrl("/inbox?filter=unread")} className="reply-badge inbox-unread-shortcut" aria-live="polite" aria-atomic="true" title="Unread replies · checks every 15 seconds while this page is open" aria-label={display + " unread replies"}>{display} new</a>;
 }

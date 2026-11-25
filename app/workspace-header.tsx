@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { currentMailbox, mailboxUrl, type Mailbox } from "./mailbox";
 import { ReplyBadge } from "./replies/reply-badge";
 import { ArrowUpRight, Inbox, MailOpen, PenLine, Send } from "lucide-react";
@@ -20,7 +20,7 @@ export function WorkspaceHeader({ current }: { current: "compose" | "sent" | "re
       }}><option value="samantha">Samantha</option><option value="design">Design</option><option value="allen">Allen Samuel</option></select>
     </label>
     <nav aria-label="Workspace">{links.map(({ id, href, label, Icon }) =>
-      <a key={id} href={mailboxUrl(href, mailbox)} className={current === id ? "selected" : ""} aria-current={current === id ? "page" : undefined}><Icon/>{label}{id === "replies" && <ReplyBadge/>}</a>)}</nav>
+      <Fragment key={id}><a href={mailboxUrl(href, mailbox)} className={current === id ? "selected" : ""} aria-current={current === id ? "page" : undefined}><Icon/>{label}</a>{id === "replies" && <ReplyBadge/>}</Fragment>)}</nav>
     <a className="docs" href="https://resend.com/docs" target="_blank" rel="noreferrer">Resend docs <ArrowUpRight size={15}/></a>
   </div></header>;
 }

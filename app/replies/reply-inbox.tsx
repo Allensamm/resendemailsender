@@ -28,6 +28,8 @@ async function load<T>(query: string, signal: AbortSignal, init?: RequestInit): 
 }
 
 export function ReplyInbox({ passwordConfigured }: { passwordConfigured: boolean }) {
+  const [unreadOnly, setUnreadOnly] = useState(false);
+  useEffect(() => { setUnreadOnly(new URLSearchParams(location.search).get("filter") === "unread"); }, []);
   const [requiresPassword, setRequiresPassword] = useState(false);
   const [password, setPassword] = useState("");
   const [page, setPage] = useState<ReplyPage | null>(null);
@@ -161,6 +163,13 @@ export function ReplyInbox({ passwordConfigured }: { passwordConfigured: boolean
 
   const receipts = readReceipts();
   const conversations = groupReplies(page?.messages || [], bodies);
+  const unreadGroups = conversations.filter(group => group.messages.some(message => !isDeleted(message.id) && !wasRead(message.id)));
+  function filterUnread(value: boolean) {
+    setUnreadOnly(value); setSelected(null);
+    const url = new URL(location.href);
+    if (value) url.searchParams.set("filter", "unread"); else url.searchParams.delete("filter");
+    window.history.replaceState(null, "", url);
+  }
   const selectedGroup = selected ? conversations.find(group => group.messages.some(item => item.id === selected.message.id)) : undefined;
   function hideMessages(ids: string[]) {
     try { setDeleted(ids, true); setUndo(ids); setSelected(null); }
@@ -195,11 +204,13 @@ export function ReplyInbox({ passwordConfigured }: { passwordConfigured: boolean
       <ReplyConversation key={selected.message.id} message={selected.message} body={selected.body} messages={selectedGroup?.messages || [selected.message]} bodies={bodies} onDelete={hideMessages}/>
     </article> : <div className="chat-welcome"><MailOpen size={40}/><h3>Your conversations</h3><p>Select a conversation to read and send messages.</p></div>}</div><div className="inbox-chat-list">
       <div className="mailbox-label"><Mail size={14}/>{page.mailbox}</div>
+      <div className="inbox-filters" aria-label="Filter conversations"><button type="button" aria-pressed={!unreadOnly} onClick={() => filterUnread(false)}>All</button><button type="button" aria-pressed={unreadOnly} onClick={() => filterUnread(true)}>Unread ({unreadGroups.length})</button></div>
+      {unreadOnly && unreadGroups.length === 0 && <p className="inbox-status">{page.next ? "No unread replies in loaded conversations. Load older messages to check more." : "You’re all caught up. No unread replies."}</p>}
       <p className="reply-meta">Delete hides messages in this browser only. Originals stay in Resend.</p>
       {conversations.map(group => {
         const visible = group.messages.filter(message => !isDeleted(message.id));
         const message = visible.at(-1);
-        if (!message) return null;
+        if (!message || (unreadOnly && !visible.some(item => !wasRead(item.id)))) return null;
         const status = conversationStatus(visible, bodies, receipts, wasRead);
         const StatusIcon = status === "unread" ? Mail : status === "replied" ? CheckCheck : MailOpen;
         return <article className={"receipt inbox-conversation-row conversation-" + status} key={group.id}>
