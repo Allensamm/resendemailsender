@@ -2,12 +2,13 @@
 import { mailboxFetch } from "../mailbox";
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { ChevronLeft, Inbox, LockKeyhole, Mail, MailOpen, RefreshCw, Trash2 } from "lucide-react";
+import { CheckCheck, ChevronLeft, Inbox, LockKeyhole, Mail, MailOpen, RefreshCw, Trash2 } from "lucide-react";
 import type { ReplyBody, ReplyPage, ReplySummary } from "../../lib/read-replies";
 
 import { ReplyConversation } from "./reply-conversation";
-import { isDeleted, setDeleted, markRead, onInboxChange, sessionChanged } from "./read-state";
+import { isDeleted, setDeleted, markRead, wasRead, onInboxChange, sessionChanged } from "./read-state";
 
+import { conversationStatus } from "./conversation-status";
 import { groupReplies } from "./threads";
 import { readReceipts } from "../receipts";
 
@@ -94,7 +95,7 @@ export function ReplyInbox({ passwordConfigured }: { passwordConfigured: boolean
     const hide = () => clearView(false);
     const resume = (event: PageTransitionEvent) => { if (event.persisted) restore(); };
     const unsubscribe = onInboxChange(change => {
-      if (change === "deleted") redraw(value => value + 1);
+      if (change === "deleted" || change === "read") redraw(value => value + 1);
       if (change === "lock") clearView(true);
       if (change === "unlock") restore();
     });
@@ -133,6 +134,7 @@ export function ReplyInbox({ passwordConfigured }: { passwordConfigured: boolean
     });
   }
 
+  const receipts = readReceipts();
   const conversations = groupReplies(page?.messages || [], bodies);
   const selectedGroup = selected ? conversations.find(group => group.messages.some(item => item.id === selected.message.id)) : undefined;
   function hideMessages(ids: string[]) {
@@ -173,9 +175,12 @@ export function ReplyInbox({ passwordConfigured }: { passwordConfigured: boolean
         const visible = group.messages.filter(message => !isDeleted(message.id));
         const message = visible.at(-1);
         if (!message) return null;
-        return <article className="receipt inbox-conversation-row" key={group.id}>
-          <button type="button" disabled={busy} onClick={() => void open(message)}><Mail size={18}/>
+        const status = conversationStatus(visible, bodies, receipts, wasRead);
+        const StatusIcon = status === "unread" ? Mail : status === "replied" ? CheckCheck : MailOpen;
+        return <article className={"receipt inbox-conversation-row conversation-" + status} key={group.id}>
+          <button type="button" disabled={busy} onClick={() => void open(message)}><StatusIcon size={18} className="conversation-icon"/>
             <span><b>{message.subject || "(No subject)"}</b><small>{message.from}{visible.length > 1 ? ` · ${visible.length} replies` : ""}</small></span>
+            <em className={"conversation-status " + status}>{status === "unread" ? "Unread" : status === "replied" ? "Replied" : "Read"}</em>
             <time dateTime={message.date}>{new Date(message.date).toLocaleDateString()}</time></button>
           <button type="button" className="inbox-control delete-conversation" disabled={busy} aria-label={"Delete conversation " + (message.subject || "(No subject)")} onClick={() => deleteConversation(group.messages)}><Trash2 size={16}/></button>
         </article>;

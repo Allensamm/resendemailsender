@@ -130,3 +130,12 @@ footer{border-color:var(--line);color:#6f687d;font-size:12px;padding:22px 0}foot
 @media(max-width:1000px){.top-inner{gap:20px}.top nav a{padding:10px 11px}}
 @media(max-width:760px){.top-inner{padding:16px 0 12px;gap:16px;min-height:126px}.top-inner nav{gap:8px}.top nav a{flex:1;justify-content:center}.brand{font-size:27px}.mailbox-switch{margin-left:auto}.page-heading{margin-top:30px}.page-heading p{font-size:15px}}
 @media(max-width:420px){.brand{font-size:25px;gap:9px}.logo{width:35px;height:40px}.brand-wordmark small{font-size:9px;letter-spacing:1.3px}.mailbox-switch select{min-width:105px;max-width:125px}.top nav a{font-size:13px;padding:10px 7px}.page-heading h1{font-size:43px}.sequence-send{padding:18px}.card-heading{padding:16px 18px}.card-heading h2{font-size:24px}}
+
+/* Inbox activity states remain readable without relying on color alone. */
+.conversation-status{display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;border-radius:20px;padding:5px 10px;font:650 12px/1.4 var(--sans);font-style:normal}
+.conversation-status.unread{background:#e8ddff;color:#5934a3}.conversation-status.read{background:#e9edf1;color:#536171}.conversation-status.replied{background:#d9f2e4;color:#216343}
+.inbox-conversation-row{border-left:4px solid transparent}
+.conversation-unread{border-left-color:#8054ce;background:#f6f1ff}.conversation-read{border-left-color:#a4aebb;background:#fff}.conversation-replied{border-left-color:#40966a;background:#f2faf5}
+.inbox-conversation-row>button{background:transparent}.conversation-unread .conversation-icon{color:#7545bb}.conversation-read .conversation-icon{color:#788594}.conversation-replied .conversation-icon{color:#318255}
+.conversation-read>button b,.conversation-replied>button b{font-weight:500}.conversation-unread>button b{font-weight:750}
+@media(max-width:680px){.inbox-conversation-row>button:first-child{display:grid;grid-template-columns:18px minmax(0,1fr) auto;gap:8px;padding:16px 12px}.inbox-conversation-row time{grid-column:2}.conversation-status{padding:4px 7px;font-size:11px}.inbox-conversation-row>.delete-conversation{padding:10px}}
