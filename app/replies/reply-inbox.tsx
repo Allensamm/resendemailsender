@@ -109,6 +109,31 @@ export function ReplyInbox({ passwordConfigured }: { passwordConfigured: boolean
     };
   }, [passwordConfigured, clearView, fetchPage]);
 
+  // Refresh new messages without locking the composer or interrupting a send.
+  useEffect(() => {
+    if (!page || requiresPassword || busy) return;
+    const controller = new AbortController();
+    let loading = false;
+    const timer = window.setInterval(async () => {
+      if (document.hidden || loading) return;
+      loading = true;
+      try {
+        const result = await load<ReplyPage>("", controller.signal);
+        if (controller.signal.aborted) return;
+        setPage(previous => previous ? { ...previous, messages: [...result.messages, ...previous.messages.filter(item => !result.messages.some(fresh => fresh.id === item.id))] } : result);
+        for (const item of result.messages) {
+          if (bodyCache.current[item.id]) continue;
+          await new Promise(resolve => setTimeout(resolve, 650));
+          if (controller.signal.aborted) return;
+          bodyCache.current[item.id] = await load<ReplyBody>("?id=" + encodeURIComponent(item.id), controller.signal);
+          if (!controller.signal.aborted) setBodies({ ...bodyCache.current });
+        }
+      } catch { /* Manual Refresh remains available after a temporary failure. */ }
+      finally { loading = false; }
+    }, 20000);
+    return () => { clearInterval(timer); controller.abort(); };
+  }, [Boolean(page), requiresPassword, busy]);
+
   function open(message: ReplySummary) {
     return run(async signal => {
       const body = bodyCache.current[message.id] || await load<ReplyBody>("?id=" + encodeURIComponent(message.id), signal);
@@ -149,9 +174,9 @@ export function ReplyInbox({ passwordConfigured }: { passwordConfigured: boolean
   }
 
   return <section className="card reply-inbox">
-    <header className="card-heading"><span className="tile"><Inbox/></span><h2>Reply inbox</h2>
+    <header className="card-heading"><span className="tile"><Inbox/></span><h2>Inbox</h2>
       {passwordConfigured && !requiresPassword && (page || error) && <div className="inbox-controls">
-        {!selected && <button type="button" className="inbox-control" disabled={busy} onClick={() => void fetchPage(undefined, true)}><RefreshCw size={15}/>Refresh</button>}
+        {<button type="button" className="inbox-control" disabled={busy} onClick={() => void fetchPage(undefined, true)}><RefreshCw size={15}/>Refresh</button>}
         <button type="button" className="inbox-control" onClick={lock}><LockKeyhole size={15}/>Log out</button>
       </div>}
     </header>
@@ -164,11 +189,11 @@ export function ReplyInbox({ passwordConfigured }: { passwordConfigured: boolean
       <div className="field"><label htmlFor="inbox-password">Inbox password</label><input id="inbox-password" type="password" required autoComplete="current-password" value={password} onChange={e => setPassword(e.target.value)}/></div>
       <button className="primary" type="submit" disabled={busy}>{busy ? "Opening…" : "Open inbox"}</button></form> :
      !page ? (!error && <p className="inbox-status" role="status">Opening your inbox…</p>) :
-     selected ? <article className="reply-reader">
-      <button type="button" className="inbox-control" onClick={() => { setSelected(null); setError(""); }}><ChevronLeft size={15}/>All replies</button>
+     <div className={"inbox-chat-layout" + (selected ? " has-conversation" : "")}><div className="inbox-chat-main">{selected ? <article className="reply-reader">
+      <button type="button" className="inbox-control" onClick={() => { setSelected(null); setError(""); }}><ChevronLeft size={15}/>All conversations</button>
       <h3>{selected.message.subject || "(No subject)"}</h3>
       <ReplyConversation key={selected.message.id} message={selected.message} body={selected.body} messages={selectedGroup?.messages || [selected.message]} bodies={bodies} onDelete={hideMessages}/>
-    </article> : <>
+    </article> : <div className="chat-welcome"><MailOpen size={40}/><h3>Your conversations</h3><p>Select a conversation to read and send messages.</p></div>}</div><div className="inbox-chat-list">
       <div className="mailbox-label"><Mail size={14}/>{page.mailbox}</div>
       <p className="reply-meta">Delete hides messages in this browser only. Originals stay in Resend.</p>
       {conversations.map(group => {
@@ -179,16 +204,16 @@ export function ReplyInbox({ passwordConfigured }: { passwordConfigured: boolean
         const StatusIcon = status === "unread" ? Mail : status === "replied" ? CheckCheck : MailOpen;
         return <article className={"receipt inbox-conversation-row conversation-" + status} key={group.id}>
           <button type="button" disabled={busy} onClick={() => void open(message)}><StatusIcon size={18} className="conversation-icon"/>
-            <span><b>{message.subject || "(No subject)"}</b><small>{message.from}{visible.length > 1 ? ` · ${visible.length} replies` : ""}</small></span>
+            <span><b>{message.subject || "(No subject)"}</b><small>{message.from}{visible.length > 1 ? ` · ${visible.length} messages` : ""}</small></span>
             <em className={"conversation-status " + status}>{status === "unread" ? "Unread" : status === "replied" ? "Replied" : "Read"}</em>
             <time dateTime={message.date}>{new Date(message.date).toLocaleDateString()}</time></button>
           <button type="button" className="inbox-control delete-conversation" disabled={busy} aria-label={"Delete conversation " + (message.subject || "(No subject)")} onClick={() => deleteConversation(group.messages)}><Trash2 size={16}/></button>
         </article>;
       })}
-      {!page.messages.some(message => !isDeleted(message.id)) && <div className="empty"><MailOpen size={35}/><h3>No replies yet</h3>
+      {!page.messages.some(message => !isDeleted(message.id)) && <div className="empty"><MailOpen size={35}/><h3>No conversations yet</h3>
         <p>Messages received by Resend at {page.mailbox} appear here. Use Refresh to check again.</p></div>}
       {page.next && <div className="inbox-more"><button className="inbox-control" disabled={busy} onClick={() => void fetchPage(page.next!)}>Load older messages</button></div>}
-    </>}
+    </div></div>}
     {page && busy && <p className="inbox-status" role="status">Loading and grouping replies…</p>}
     {error && <p className="notice" role="alert">{error}</p>}
   </section>;

@@ -10,7 +10,7 @@ export function WorkspaceHeader({ current }: { current: "compose" | "sent" | "re
   const links = [
     { id: "compose", href: "/", label: "Compose", Icon: PenLine },
     { id: "sent", href: "/#sent", label: "Sent mail", Icon: Inbox },
-    { id: "replies", href: "/replies", label: "Replies", Icon: MailOpen },
+    { id: "replies", href: "/inbox", label: "Inbox", Icon: MailOpen },
   ];
   return <header className="top"><div className="top-inner">
     <a className="brand" href={mailboxUrl("/", mailbox)} aria-label="Letterpress home"><span className="logo"><Send size={23} strokeWidth={2}/></span><span className="brand-wordmark">Letterpress<small>Your email studio</small></span></a>
