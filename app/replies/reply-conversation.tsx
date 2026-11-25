@@ -140,11 +140,16 @@ export function ReplyConversation({ message, body, messages, bodies, onDelete }:
   }
   // Reconstruct recognizable quoted messages when an original is absent locally.
   const known = new Set([...messages.map(item => chatTextKey(bodies[item.id]?.text || (item.id === message.id ? body.text : ''))), ...history.map(item => chatTextKey(item.message))]);
-  const recovered: { sender: string; text: string }[] = [];
   for (const item of messages) {
-    for (const earlier of splitChatText(bodies[item.id]?.text || (item.id === message.id ? body.text : '')).history) {
+    const earlierMessages = splitChatText(bodies[item.id]?.text || (item.id === message.id ? body.text : '')).history;
+    for (const [index, earlier] of earlierMessages.entries()) {
       const key = chatTextKey(earlier.text);
-      if (key && !known.has(key)) { known.add(key); recovered.push(earlier); }
+      if (key && !known.has(key)) {
+        known.add(key);
+        entries.push({id: 'history-' + item.id + '-' + index,
+          at: new Date(Date.parse(item.date) - (earlierMessages.length - index)).toISOString(),
+          content: <article className={"thread-item" + (sender.toLowerCase().includes(earlier.sender.toLowerCase()) ? " thread-outgoing" : "")}><strong className="thread-sender">{sender.toLowerCase().includes(earlier.sender.toLowerCase()) ? "You" : earlier.sender}</strong><MessageContent text={earlier.text}/><small className="thread-time">From email history</small></article>});
+      }
     }
   }
   entries.sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
@@ -154,7 +159,7 @@ export function ReplyConversation({ message, body, messages, bodies, onDelete }:
   }, [message.id, entries.length]);
   return <>
     <div className="thread-messages" ref={scrollArea} role="log" aria-label="Conversation messages">
-      {recovered.map((item, index) => <article key={'history-' + index} className={"thread-item" + (sender.toLowerCase().includes(item.sender.toLowerCase()) ? " thread-outgoing" : "")}><strong className="thread-sender">{item.sender}</strong><MessageContent text={item.text}/><small className="thread-time">Earlier message · from email history</small></article>)}{entries.map(item => <div className="thread-message-wrap" key={item.id}>{item.content}<button type="button" className="inbox-control thread-delete" aria-label="Delete message from this browser" disabled={busy} onClick={() => onDelete([item.id])}><Trash2 size={13} />Delete</button></div>)}</div>
+      {entries.map(item => <div className="thread-message-wrap" key={item.id}>{item.content}{!item.id.startsWith("history-") && <button type="button" className="inbox-control thread-delete" aria-label="Delete message from this browser" disabled={busy} onClick={() => onDelete([item.id])}><Trash2 size={13} />Delete</button>}</div>)}</div>
     {notice && <p className="thread-feedback" role="status">{notice}</p>}
     {!body.threadId || !body.replyTo.length ? <p className="reply-meta">This email has no usable reply address or original Message-ID.</p> :
         <form className="thread-compose" onSubmit={submit}>

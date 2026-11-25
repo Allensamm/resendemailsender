@@ -1,8 +1,8 @@
 // Keep quoted history out of the newest bubble. Only recognizable email headers
 // become earlier messages; ordinary prose (including inline answers) is preserved.
 export function splitChatText(text: string): { text: string; history: { sender: string; text: string }[] } {
-  const clean = text.replace(/\r\n/g, '\n');
-  const marker = /(?:^|\n)\s*On ([\s\S]{1,500}?)wrote:\s*\n/i.exec(clean);
+  const clean = text.replace(/\r\n/g, '\n').replace(/\uFEFF/g, '');
+  const marker = /(?:^|\n)[\t >]*On ([\s\S]{1,500}?)wrote:\s*\n/i.exec(clean);
   if (!marker) return { text: clean.trim(), history: [] };
   const header = marker[1].replace(/\s+/g, ' ').trim();
   const email = header.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0];
