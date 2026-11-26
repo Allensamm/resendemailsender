@@ -35,6 +35,7 @@ export function ReplyInbox({ passwordConfigured }: { passwordConfigured: boolean
   const [page, setPage] = useState<ReplyPage | null>(null);
   const [selected, setSelected] = useState<{ message: ReplySummary; body: ReplyBody } | null>(null);
   const [bodies, setBodies] = useState<Record<string, ReplyBody>>({});
+  const prefetching = useRef(false);
   const bodyCache = useRef<Record<string, ReplyBody>>({});
   const [, redraw] = useState(0);
   const [undo, setUndo] = useState<string[]>([]);
@@ -78,16 +79,24 @@ export function ReplyInbox({ passwordConfigured }: { passwordConfigured: boolean
         const existing = new Set(previous.messages.map(item => item.id));
         return { ...result, messages: [...previous.messages, ...result.messages.filter(item => !existing.has(item.id))] };
       });
-      for (const message of result.messages) {
+      // The list is usable immediately; thread enrichment must not block clicks.
+      setBusy(false);
+      prefetching.current = true;
+      try { for (const message of result.messages) {
         if (bodyCache.current[message.id]) continue;
         // Pace detail lookups to leave room for the unread badge and send requests.
         await new Promise(resolve => setTimeout(resolve, 200));
         if (signal.aborted) return;
-        const body = await load<ReplyBody>("?id=" + encodeURIComponent(message.id), signal);
+        let body: ReplyBody;
+        try { body = await load<ReplyBody>("?id=" + encodeURIComponent(message.id), signal); }
+        catch (error) {
+          if (signal.aborted || (error instanceof InboxError && error.status === 401)) throw error;
+          continue; // A single unavailable email must not stop other messages loading.
+        }
         if (signal.aborted) return;
         bodyCache.current[message.id] = body;
         setBodies({ ...bodyCache.current });
-      }
+      } } finally { prefetching.current = false; }
     }, silentAuth);
   }, [run]);
 
@@ -117,7 +126,7 @@ export function ReplyInbox({ passwordConfigured }: { passwordConfigured: boolean
     const controller = new AbortController();
     let loading = false;
     const timer = window.setInterval(async () => {
-      if (document.hidden || loading) return;
+      if (document.hidden || loading || prefetching.current || !navigator.onLine) return;
       loading = true;
       try {
         const result = await load<ReplyPage>("", controller.signal);
@@ -140,6 +149,8 @@ export function ReplyInbox({ passwordConfigured }: { passwordConfigured: boolean
     return run(async signal => {
       const body = bodyCache.current[message.id] || await load<ReplyBody>("?id=" + encodeURIComponent(message.id), signal);
       if (!signal.aborted) {
+        bodyCache.current[message.id] = body;
+        setBodies({ ...bodyCache.current });
         setSelected({ message, body });
         const group = groupReplies(page?.messages || [message], bodyCache.current).find(group => group.messages.some(item => item.id === message.id));
         for (const item of group?.messages || [message]) markRead(item.id);
@@ -225,7 +236,7 @@ export function ReplyInbox({ passwordConfigured }: { passwordConfigured: boolean
         <p>Messages received by Resend at {page.mailbox} appear here. Use Refresh to check again.</p></div>}
       {page.next && <div className="inbox-more"><button className="inbox-control" disabled={busy} onClick={() => void fetchPage(page.next!)}>Load older messages</button></div>}
     </div></div>}
-    {page && busy && <p className="inbox-status" role="status">Loading and grouping replies…</p>}
+    {page && busy && <p className="inbox-status" role="status">Loading message…</p>}
     {error && <p className="notice" role="alert">{error}</p>}
   </section>;
 }

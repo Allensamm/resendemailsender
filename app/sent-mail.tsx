@@ -1,4 +1,6 @@
 "use client";
+import dynamic from "next/dynamic";
+const SentFollowUp = dynamic(() => import("./sent-follow-up").then(module => module.SentFollowUp), { loading: () => <p>Loading follow-up composer…</p> });
 import { MessageContent } from "./rich-composer";
 import { mailboxFetch, mailboxUrl } from "./mailbox";
 
@@ -124,7 +126,8 @@ export function SentMail({ history, onCompose, onHistory }: { history: Receipt[]
           {shown === r.id && <div className="details"><small>From {r.from}</small>{r.cc && <small>Cc {r.cc}</small>}{r.bcc && <small>Bcc {r.bcc}</small>}<MessageContent text={r.message} html={r.messageHtml}/>{r.attachmentNames?.map((name, index) => <small key={index}>Attachment: {name}</small>)}<SignaturePreview signature={r.signature}/><small>{description}</small><small><Check size={14}/> Accepted · {r.id}</small>
             {r.scheduledAt && event === "scheduled" && <CancelSchedule id={r.id} locked={locked} disabled={busy} onCanceled={() => {
               onHistory(saveReceipt({ ...r, canceled: true }, history)); setEvents(previous => ({ ...previous, [r.id]: "canceled" }));
-            }}/>}</div>}
+            }}/>}
+            {!r.canceled && !(r.scheduledAt && Date.parse(r.scheduledAt) > Date.now()) && <SentFollowUp receipt={r} locked={locked} onHistory={onHistory}/>}</div>}
         </article>;
       })}
     {visibleHistory.length > 0 && <details className="status-guide"><summary>About delivery labels</summary>

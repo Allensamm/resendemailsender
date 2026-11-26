@@ -24,7 +24,7 @@ export function ReplyBadge() {
       known.clear(); more = false; setCount(null);
     }
     async function refresh() {
-      if (document.hidden || request || locked) return;
+      if (document.hidden || request || locked || !navigator.onLine) return;
       const current = new AbortController();
       request = current;
       const ids = new Set<string>();
